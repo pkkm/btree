@@ -12,10 +12,10 @@ typedef uint64_t BtreeValue;
 
 enum {
 	BTREE_BLOCK_SIZE = 512,
-	BTREE_MAX_POSSIBLE_DEGREE = 1 + (BTREE_BLOCK_SIZE - sizeof(BtreePtr))
+	BTREE_MAX_POSSIBLE_KEYS = (BTREE_BLOCK_SIZE - sizeof(BtreePtr))
 		/ (sizeof(BtreeKey) + sizeof(BtreeValue) + sizeof(BtreePtr)),
-	BTREE_MIN_DEGREE = BTREE_MAX_POSSIBLE_DEGREE / 2,
-	BTREE_MAX_DEGREE = BTREE_MIN_DEGREE * 2
+	BTREE_MIN_KEYS = BTREE_MAX_POSSIBLE_KEYS / 2,
+	BTREE_MAX_KEYS = BTREE_MIN_KEYS * 2
 };
 
 typedef struct {
@@ -24,9 +24,9 @@ typedef struct {
 } BtreeSuperblock;
 
 typedef struct {
-	BtreeKey keys[BTREE_MAX_DEGREE - 1];
-	BtreePtr children[BTREE_MAX_DEGREE];
-	BtreeValue values[BTREE_MAX_DEGREE - 1];
+	BtreeKey keys[BTREE_MAX_KEYS];
+	BtreePtr children[BTREE_MAX_KEYS + 1];
+	BtreeValue values[BTREE_MAX_KEYS];
 } BtreeNode;
 
 typedef struct {
