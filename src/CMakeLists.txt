@@ -2,5 +2,7 @@ set(binary_name "${PROJECT_NAME}")
 add_executable("${binary_name}" main.c)
 
 add_library(src_fs fs.c)
+add_library(src_btree btree.c)
+target_link_libraries(src_btree src_fs)
 
-target_link_libraries("${binary_name}" src_fs)
+target_link_libraries("${binary_name}" src_btree)
