@@ -4,6 +4,7 @@
 #include "fs.h"
 
 typedef uint64_t BtreePtr;
+enum { BTREE_NULL = 0 };
 // A "pointer" to a B-tree node is just the block number.
 // 0 can be used as a NULL since the first block is always the superblock.
 
@@ -65,7 +66,7 @@ Btree *btree_new(const char *file_name) {
 
 	fs_set_size(btree->file, BTREE_BLOCK_SIZE);
 	BtreeBlock superblock;
-	superblock.super.free_list_head = 0;
+	superblock.super.free_list_head = BTREE_NULL;
 	superblock.super.end = 1;
 	btree_write_block(btree, superblock, 0);
 
@@ -81,7 +82,7 @@ void btree_destroy(Btree *btree) {
 
 BtreePtr btree_alloc_node(Btree *btree) {
 	BtreePtr free = btree->superblock.super.free_list_head;
-	if (free != 0) {
+	if (free != BTREE_NULL) {
 		// If the free list is non-empty, use its first element.
 		BtreePtr next_free = btree_read_block(btree, free).free.next_free;
 		btree->superblock.super.free_list_head = next_free;
