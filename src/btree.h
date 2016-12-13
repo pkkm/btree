@@ -3,10 +3,13 @@
 #include "xassert.h"
 #include "fs.h"
 
+// The first block (address 0) of the B-tree's on-disk storage is the superblock
+// (which stores metadata). The next one is the root node.
+
 typedef uint64_t BtreePtr;
 enum { BTREE_NULL = 0 };
-// A "pointer" to a B-tree node is just the block number.
-// 0 can be used as a NULL since the first block is always the superblock.
+// A "pointer" to a B-tree node is just the block index.
+// 0 can be used as a NULL since we don't need any pointers to the superblock.
 
 typedef uint32_t BtreeKey;
 typedef uint64_t BtreeValue;
@@ -32,7 +35,7 @@ typedef struct {
 
 typedef struct {
 	BtreePtr next_free;
-} BtreeFree;
+} BtreeFree; // Free block (which is always an entry in the free list).
 
 typedef union {
 	char bytes[BTREE_BLOCK_SIZE];
@@ -43,7 +46,7 @@ typedef union {
 
 typedef struct {
 	FsFile *file;
-	BtreeBlock superblock;
+	BtreeBlock superblock; // Cache.
 } Btree;
 
 BtreeBlock btree_read_block(Btree *btree, BtreePtr ptr) {
