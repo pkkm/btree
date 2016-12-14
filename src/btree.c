@@ -36,6 +36,9 @@ typedef struct {
 } BtreeNode;
 
 static bool btree_node_valid(BtreeNode node) {
+	if (node.n_keys < 0 || node.n_keys > BTREE_MAX_KEYS)
+		return false;
+
 	for (int i_child = 0; i_child <= node.n_keys; i_child++) {
 		if (node.children[i_child] == BTREE_NULL)
 			return false;
@@ -87,10 +90,18 @@ void btree_write_free(Btree *btree, BtreeFree free, BtreePtr ptr) {
 BtreeNode btree_read_node(Btree *btree, BtreePtr ptr) {
 	BtreeNode node;
 	fs_read(btree->file, &node, ptr * BTREE_BLOCK_SIZE, sizeof(node));
+
+	int i_key = 0;
+	while (i_key < BTREE_MAX_KEYS && node.children[i_key + 1] != BTREE_NULL)
+		i_key++;
+	node.n_keys = i_key;
+
+	xassert(2, btree_node_valid(node));
 	return node;
 }
 
 void btree_write_node(Btree *btree, BtreeNode node, BtreePtr ptr) {
+	xassert(2, btree_node_valid(node));
 	fs_write(btree->file, &node, ptr * BTREE_BLOCK_SIZE, sizeof(node));
 }
 
