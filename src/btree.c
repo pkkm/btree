@@ -11,6 +11,10 @@ typedef uint64_t BtreePtr;
 #define BTREE_NULL ((BtreePtr) -1)
 // A "pointer" to a B-tree node is just the block index.
 
+static int btree_key_cmp(BtreeKey a, BtreeKey b) {
+	return (a > b) - (a < b); // Ascending order.
+}
+
 enum {
 	BTREE_BLOCK_SIZE = 512,
 	BTREE_MAX_POSSIBLE_KEYS = (BTREE_BLOCK_SIZE - sizeof(BtreePtr))
