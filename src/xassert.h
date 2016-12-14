@@ -4,7 +4,8 @@
 
 // Recommended assertion levels:
 //   * 1 -- cheap (e.g. checking if two variables are equal).
-//   * 2 -- medium (e.g. walking a linked list).
+//   * 2 -- medium (e.g. walking a linked list, or a cheap assertion executed in
+//          a very tight loop).
 //   * 3 -- expensive (e.g. reading a lot of data from disk).
 
 // XASSERT_MAX_LEVEL is the maximum assertion level to execute.
