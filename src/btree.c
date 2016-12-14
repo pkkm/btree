@@ -157,7 +157,3 @@ bool btree_get(Btree *btree, BtreeKey key, BtreeValue *value);
 
 void btree_print(Btree *btree);
 void btree_walk(Btree *btree, void (*callback)(BtreeKey, BtreeValue));
-
-void btree_update(BtreeKey old_key, BtreeValue old_value,
-                  BtreeKey new_key, BtreeValue new_value);
-void btree_delete(BtreeKey key);
