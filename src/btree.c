@@ -28,36 +28,48 @@ typedef struct {
 	BtreeKey keys[BTREE_MAX_KEYS];
 	BtreePtr children[BTREE_MAX_KEYS + 1];
 	BtreeValue values[BTREE_MAX_KEYS];
+	int n_keys; // Not on disk; we set it after reading or before writing.
 } BtreeNode;
 
 typedef struct {
 	BtreePtr next_free;
 } BtreeFree; // Free block (which is always an entry in the free list).
 
-typedef union {
-	char bytes[BTREE_BLOCK_SIZE];
-	BtreeSuperblock super;
-	BtreeNode node;
-	BtreeFree free;
-} BtreeBlock;
-
 struct Btree { // Typedef'd in the header file.
 	FsFile *file;
-	BtreeBlock superblock; // Cache.
+	BtreeSuperblock superblock; // Cache.
 };
 
-BtreeBlock btree_read_block(Btree *btree, BtreePtr ptr) {
-	BtreeBlock block;
-	fs_read(btree->file, block.bytes, ptr * BTREE_BLOCK_SIZE, sizeof(block));
-	return block;
+void btree_read_superblock(Btree *btree) {
+	fs_read(btree->file, &btree->superblock, 0, sizeof(btree->superblock));
 }
 
-void btree_write_block(Btree *btree, BtreeBlock block, BtreePtr ptr) {
-	fs_write(btree->file, block.bytes, ptr * BTREE_BLOCK_SIZE, sizeof(block));
+void btree_write_superblock(Btree *btree) {
+	fs_write(btree->file, &btree->superblock, 0, sizeof(btree->superblock));
+}
+
+BtreeFree btree_read_free(Btree *btree, BtreePtr ptr) {
+	BtreeFree free;
+	fs_read(btree->file, &free, ptr * BTREE_BLOCK_SIZE, sizeof(free));
+	return free;
+}
+
+void btree_write_free(Btree *btree, BtreeFree free, BtreePtr ptr) {
+	fs_write(btree->file, &free, ptr * BTREE_BLOCK_SIZE, sizeof(free));
+}
+
+BtreeNode btree_read_node(Btree *btree, BtreePtr ptr) {
+	BtreeNode node;
+	fs_read(btree->file, &node, ptr * BTREE_BLOCK_SIZE, sizeof(node));
+	return node;
+}
+
+void btree_write_node(Btree *btree, BtreeNode node, BtreePtr ptr) {
+	fs_write(btree->file, &node, ptr * BTREE_BLOCK_SIZE, sizeof(node));
 }
 
 void btree_sync(Btree *btree) {
-	btree_write_block(btree, btree->superblock, 0);
+	btree_write_superblock(btree);
 }
 
 Btree *btree_new(const char *file_name) {
@@ -65,10 +77,9 @@ Btree *btree_new(const char *file_name) {
 	btree->file = fs_open(file_name, true);
 
 	fs_set_size(btree->file, BTREE_BLOCK_SIZE);
-	BtreeBlock superblock;
-	superblock.super.free_list_head = BTREE_NULL;
-	superblock.super.end = 1;
-	btree_write_block(btree, superblock, 0);
+	btree->superblock.end = 1;
+	btree->superblock.free_list_head = BTREE_NULL;
+	btree_write_superblock(btree);
 
 	return btree;
 }
@@ -81,28 +92,27 @@ void btree_destroy(Btree *btree) {
 }
 
 BtreePtr btree_alloc_node(Btree *btree) {
-	BtreePtr free = btree->superblock.super.free_list_head;
+	BtreePtr free = btree->superblock.free_list_head;
 	if (free != BTREE_NULL) {
 		// If the free list is non-empty, use its first element.
-		BtreePtr next_free = btree_read_block(btree, free).free.next_free;
-		btree->superblock.super.free_list_head = next_free;
+		BtreePtr next_free = btree_read_free(btree, free).next_free;
+		btree->superblock.free_list_head = next_free;
 		return free;
 	} else {
 		// Otherwise, enlarge the file by 1 block.
-		BtreePtr old_end = btree->superblock.super.end;
-		btree->superblock.super.end++;
-		fs_set_size(btree->file,
-		            btree->superblock.super.end * BTREE_BLOCK_SIZE);
+		BtreePtr old_end = btree->superblock.end;
+		btree->superblock.end++;
+		fs_set_size(btree->file, btree->superblock.end * BTREE_BLOCK_SIZE);
 		return old_end;
 	}
 }
 
 void btree_dealloc_node(Btree *btree, BtreePtr ptr) {
 	// Only adds to the free list; doesn't shrink the file.
-	BtreeBlock new_free;
-	new_free.free.next_free = btree->superblock.super.free_list_head;
-	btree_write_block(btree, new_free, ptr);
-	btree->superblock.super.free_list_head = ptr;
+	BtreeFree new_free;
+	new_free.next_free = btree->superblock.free_list_head;
+	btree_write_free(btree, new_free, ptr);
+	btree->superblock.free_list_head = ptr;
 }
 
 void btree_insert(Btree *btree, BtreeKey key, BtreeValue value);
