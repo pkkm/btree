@@ -35,6 +35,28 @@ typedef struct {
 	int n_keys; // Not on disk; we set it after reading or before writing.
 } BtreeNode;
 
+static bool btree_node_valid(BtreeNode node) {
+	for (int i_child = 0; i_child <= node.n_keys; i_child++) {
+		if (node.children[i_child] == BTREE_NULL)
+			return false;
+	}
+
+	for (int i_child = node.n_keys + 1; i_child <= BTREE_MAX_KEYS; i_child++) {
+		if (node.children[i_child] != BTREE_NULL)
+			return false;
+	}
+
+	// Check that keys are in ascending order.
+	BtreeKey prev_key = node.keys[0];
+	for (int i_key = 1; i_key < node.n_keys; i_key++) {
+		if (btree_key_cmp(prev_key, node.keys[i_key]) >= 0)
+			return false;
+		prev_key = node.keys[i_key];
+	}
+
+	return true;
+}
+
 typedef struct {
 	BtreePtr next_free;
 } BtreeFree; // Free block (which is always an entry in the free list).
