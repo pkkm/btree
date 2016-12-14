@@ -8,9 +8,8 @@
 // (which stores metadata). The next one is the root node.
 
 typedef uint64_t BtreePtr;
-enum { BTREE_NULL = 0 };
+#define BTREE_NULL ((BtreePtr) -1)
 // A "pointer" to a B-tree node is just the block index.
-// 0 can be used as a NULL since we don't need any pointers to the superblock.
 
 enum {
 	BTREE_BLOCK_SIZE = 512,
