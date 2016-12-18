@@ -21,6 +21,11 @@ enum {
 		/ (sizeof(BtreeKey) + sizeof(BtreeValue) + sizeof(BtreePtr)),
 	BTREE_MIN_KEYS = BTREE_MAX_POSSIBLE_KEYS / 2,
 	BTREE_MAX_KEYS = BTREE_MIN_KEYS * 2
+	// The assignment requires BTREE_MAX_KEYS = BTREE_MIN_KEYS * 2, but we could
+	// also use BTREE_MAX_KEYS = BTREE_MAX_POSSIBLE_KEYS, BTREE_MIN_KEYS =
+	// BTREE_MAX_KEYS / 2 + BTREE_MAX_KEYS % 2 (division by 2, but rounded up
+	// instead of down). Source:
+	// <https://en.wikipedia.org/wiki/B-tree#Definition>.
 };
 
 typedef struct {
