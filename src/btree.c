@@ -119,12 +119,19 @@ static void btree_sync(Btree *btree) {
 
 Btree *btree_new(const char *file_name) {
 	Btree *btree = malloc(sizeof(*btree));
-	btree->file = fs_open(file_name, true);
 
-	fs_set_size(btree->file, BTREE_BLOCK_SIZE);
-	btree->superblock.end = 1;
+	btree->file = fs_open(file_name, true);
+	fs_set_size(btree->file, BTREE_BLOCK_SIZE * 2);
+
+	btree->superblock.end = 2;
 	btree->superblock.free_list_head = BTREE_NULL;
 	btree_write_superblock(btree);
+
+	BtreeNode root;
+	root.n_keys = 0;
+	for (int i_child = 0; i_child <= BTREE_MAX_KEYS; i_child++)
+		root.children[i_child] = BTREE_NULL;
+	btree_write_node(btree, root, 1);
 
 	return btree;
 }
