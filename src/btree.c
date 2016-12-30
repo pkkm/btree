@@ -15,7 +15,11 @@ typedef uint64_t BtreePtr;
 // A "pointer" to a B-tree node is just the block index.
 
 static int btree_key_cmp(BtreeKey a, BtreeKey b) {
-	return (a > b) - (a < b); // Ascending order.
+	// Ascending order, i.e. the return value will be:
+	//   < 0  if a < b,
+	//   == 0 if a == b,
+	//   > 0  if a > b.
+	return (a > b) - (a < b);
 }
 
 enum {
@@ -37,9 +41,10 @@ typedef struct {
 } BtreeSuperblock;
 
 typedef struct {
+	// Invariant: keys[i - 1] < (all keys in subtree at children[i]) < keys[i].
 	BtreeKey keys[BTREE_MAX_KEYS];
 	BtreePtr children[BTREE_MAX_KEYS + 1];
-	BtreeValue values[BTREE_MAX_KEYS];
+	BtreeValue values[BTREE_MAX_KEYS]; // Data associated with keys.
 	int n_keys; // Not on disk; we set it after reading or before writing.
 } BtreeNode;
 
@@ -178,6 +183,7 @@ static void btree_print_at_node(Btree *btree, FILE *stream,
 	enum { INDENT_WIDTH = 4 };
 
 	BtreeNode node = btree_read_node(btree, node_ptr);
+
 	fprintf(stream, "%*sNode %" BTREE_PTR_PRINT "\n",
 	        level * INDENT_WIDTH, "", node_ptr);
 
