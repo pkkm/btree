@@ -24,7 +24,9 @@ static int btree_key_cmp(BtreeKey a, BtreeKey b) {
 
 enum {
 	BTREE_BLOCK_SIZE = 512,
-	BTREE_MAX_POSSIBLE_KEYS = (BTREE_BLOCK_SIZE - sizeof(BtreePtr))
+	BTREE_MAX_POSSIBLE_KEYS =
+		(BTREE_BLOCK_SIZE
+		 - sizeof(uint8_t) - sizeof(uint16_t) - sizeof(BtreePtr))
 		/ (sizeof(BtreeKey) + sizeof(BtreeValue) + sizeof(BtreePtr)),
 	BTREE_MIN_KEYS = BTREE_MAX_POSSIBLE_KEYS / 2,
 	BTREE_MAX_KEYS = BTREE_MIN_KEYS * 2
@@ -41,28 +43,26 @@ typedef struct {
 } BtreeSuperblock;
 
 typedef struct {
+	bool is_leaf; // Serialized as uint8_t.
+	uint16_t n_keys;
 	// Invariant: keys[i - 1] < (all keys in subtree at children[i]) < keys[i].
 	BtreeKey keys[BTREE_MAX_KEYS];
 	BtreePtr children[BTREE_MAX_KEYS + 1];
 	BtreeValue values[BTREE_MAX_KEYS]; // Data associated with keys.
-	int n_keys; // Not on disk; we set it after reading or before writing.
 } BtreeNode;
 
 static bool btree_node_valid(BtreeNode node, bool is_root) {
-	if (node.n_keys < 0 || node.n_keys > BTREE_MAX_KEYS)
+	if (node.n_keys > BTREE_MAX_KEYS)
 		return false;
 
 	if (!is_root && node.n_keys < BTREE_MIN_KEYS)
 		return false;
 
-	for (int i_child = 0; i_child <= node.n_keys; i_child++) {
-		if (node.children[i_child] == BTREE_NULL)
-			return false;
-	}
-
-	for (int i_child = node.n_keys + 1; i_child <= BTREE_MAX_KEYS; i_child++) {
-		if (node.children[i_child] != BTREE_NULL)
-			return false;
+	if (!node.is_leaf) {
+		for (int i_child = 0; i_child <= node.n_keys; i_child++) {
+			if (node.children[i_child] == BTREE_NULL)
+				return false;
+		}
 	}
 
 	// Check that keys are in ascending order.
@@ -103,22 +103,53 @@ static void btree_write_free(Btree *btree, BtreeFree free, BtreePtr ptr) {
 	fs_write(btree->file, &free, ptr * BTREE_BLOCK_SIZE, sizeof(free));
 }
 
-static BtreeNode btree_read_node(Btree *btree, BtreePtr ptr) {
-	BtreeNode node;
-	fs_read(btree->file, &node, ptr * BTREE_BLOCK_SIZE, sizeof(node));
+#define DESERIALIZE(ptr, dest, type) \
+	do { \
+		(dest) = *(type *) (ptr); \
+		(ptr) = (char *) (ptr) + sizeof(type); \
+	} while (false)
 
-	int i_key = 0;
-	while (i_key < BTREE_MAX_KEYS && node.children[i_key + 1] != BTREE_NULL)
-		i_key++;
-	node.n_keys = i_key;
+static BtreeNode btree_read_node(Btree *btree, BtreePtr ptr) {
+	char block[BTREE_BLOCK_SIZE];
+	fs_read(btree->file, block, ptr * BTREE_BLOCK_SIZE, sizeof(block));
+	void *pos = block;
+
+	BtreeNode node;
+	DESERIALIZE(pos, node.is_leaf, uint8_t);
+	DESERIALIZE(pos, node.n_keys, uint16_t);
+	for (int i_key = 0; i_key < BTREE_MAX_KEYS; i_key++)
+		DESERIALIZE(pos, node.keys[i_key], BtreeKey);
+	for (int i_child = 0; i_child < BTREE_MAX_KEYS + 1; i_child++)
+		DESERIALIZE(pos, node.children[i_child], BtreePtr);
+	for (int i_value = 0; i_value < BTREE_MAX_KEYS; i_value++)
+		DESERIALIZE(pos, node.values[i_value], BtreeValue);
 
 	xassert(2, btree_node_valid(node, ptr == 1));
 	return node;
 }
 
+#define SERIALIZE(ptr, src, type) \
+	do { \
+		*(type *) (ptr) = (src); \
+		(ptr) = (char *) (ptr) + sizeof(type); \
+	} while (false)
+
 static void btree_write_node(Btree *btree, BtreeNode node, BtreePtr ptr) {
 	xassert(2, btree_node_valid(node, ptr == 1));
-	fs_write(btree->file, &node, ptr * BTREE_BLOCK_SIZE, sizeof(node));
+
+	char block[BTREE_BLOCK_SIZE];
+	void *pos = block;
+
+	SERIALIZE(pos, node.is_leaf ? 1 : 0, uint8_t);
+	SERIALIZE(pos, node.n_keys, uint16_t);
+	for (int i_key = 0; i_key < BTREE_MAX_KEYS; i_key++)
+		SERIALIZE(pos, node.keys[i_key], BtreeKey);
+	for (int i_child = 0; i_child < BTREE_MAX_KEYS + 1; i_child++)
+		SERIALIZE(pos, node.children[i_child], BtreePtr);
+	for (int i_value = 0; i_value < BTREE_MAX_KEYS; i_value++)
+		SERIALIZE(pos, node.values[i_value], BtreeValue);
+
+	fs_write(btree->file, block, ptr * BTREE_BLOCK_SIZE, sizeof(node));
 }
 
 static void btree_sync(Btree *btree) {
@@ -137,6 +168,7 @@ Btree *btree_new(const char *file_name) {
 
 	BtreeNode root;
 	root.n_keys = 0;
+	root.is_leaf = true;
 	for (int i_child = 0; i_child <= BTREE_MAX_KEYS; i_child++)
 		root.children[i_child] = BTREE_NULL;
 	btree_write_node(btree, root, 1);
