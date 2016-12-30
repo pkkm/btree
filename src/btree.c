@@ -173,8 +173,8 @@ static void btree_dealloc_node(Btree *btree, BtreePtr ptr) {
 void btree_insert(Btree *btree, BtreeKey key, BtreeValue value);
 bool btree_get(Btree *btree, BtreeKey key, BtreeValue *value);
 
-static void btree_print_node(Btree *btree, FILE *stream,
-                             BtreePtr node_ptr, int level) {
+static void btree_print_at_node(Btree *btree, FILE *stream,
+                                BtreePtr node_ptr, int level) {
 	enum { INDENT_WIDTH = 4 };
 
 	BtreeNode node = btree_read_node(btree, node_ptr);
@@ -183,29 +183,29 @@ static void btree_print_node(Btree *btree, FILE *stream,
 
 	// TODO don't call recursively when in a leaf node.
 	for (int i_key = 0; i_key < node.n_keys; i_key++) {
-		btree_print_node(btree, stream, node.children[i_key], level + 1);
+		btree_print_at_node(btree, stream, node.children[i_key], level + 1);
 		printf("%*sKey %" BTREE_KEY_PRINT ", value %" BTREE_VALUE_PRINT "\n",
 		       level * INDENT_WIDTH, "", node.keys[i_key], node.values[i_key]);
 	}
-	btree_print_node(btree, stream, node.children[node.n_keys + 1], level + 1);
+	btree_print_at_node(btree, stream, node.children[node.n_keys + 1], level + 1);
 }
 
 void btree_print(Btree *btree, FILE *stream) {
-	btree_print_node(btree, stream, 1, 0);
+	btree_print_at_node(btree, stream, 1, 0);
 }
 
-static void btree_walk_node(Btree *btree, BtreePtr node_ptr,
-                            void (*callback)(BtreeKey, BtreeValue)) {
+static void btree_walk_at_node(Btree *btree, BtreePtr node_ptr,
+                               void (*callback)(BtreeKey, BtreeValue)) {
 	BtreeNode node = btree_read_node(btree, node_ptr);
 
 	// TODO don't call recursively when in a leaf node.
 	for (int i_key = 0; i_key < node.n_keys; i_key++) {
-		btree_walk_node(btree, node.children[i_key], callback);
+		btree_walk_at_node(btree, node.children[i_key], callback);
 		callback(node.keys[i_key], node.values[i_key]);
 	}
-	btree_walk_node(btree, node.children[node.n_keys + 1], callback);
+	btree_walk_at_node(btree, node.children[node.n_keys + 1], callback);
 }
 
 void btree_walk(Btree *btree, void (*callback)(BtreeKey, BtreeValue)) {
-	btree_walk_node(btree, 1, callback);
+	btree_walk_at_node(btree, 1, callback);
 }
