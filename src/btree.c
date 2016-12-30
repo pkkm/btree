@@ -208,7 +208,32 @@ static void btree_dealloc_node(Btree *btree, BtreePtr ptr) {
 }
 
 void btree_insert(Btree *btree, BtreeKey key, BtreeValue value);
-bool btree_get(Btree *btree, BtreeKey key, BtreeValue *value);
+
+static bool btree_get_at_node(Btree *btree, BtreePtr node_ptr,
+                              BtreeKey key, BtreeValue *value) {
+	BtreeNode node = btree_read_node(btree, node_ptr);
+
+	// Index of first key which is >= `key`, or node.n_keys if there are none.
+	int i_key = 0;
+	while (i_key < node.n_keys && btree_key_cmp(node.keys[i_key], key) < 0)
+		i_key++;
+
+	if (i_key < node.n_keys && btree_key_cmp(node.keys[i_key], key) == 0) {
+		// We found the key.
+		*value = node.values[i_key];
+		return true;
+	} else if (node.is_leaf) {
+		return false;
+	} else {
+		// We know that keys[i_key - 1] < key < keys[i_key], so the key (if it
+		// exists) will be in the i_key-th child's subtree.
+		return btree_get_at_node(btree, node.children[i_key], key, value);
+	}
+}
+
+bool btree_get(Btree *btree, BtreeKey key, BtreeValue *value) {
+	return btree_get_at_node(btree, 1, key, value);
+}
 
 static void btree_print_at_node(Btree *btree, FILE *stream,
                                 BtreePtr node_ptr, int level) {
