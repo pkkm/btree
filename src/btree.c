@@ -222,12 +222,12 @@ static bool btree_get_at_node(Btree *btree, BtreePtr node_ptr,
 		// We found the key.
 		*value = node.values[i_key];
 		return true;
-	} else if (node.is_leaf) {
-		return false;
-	} else {
+	} else if (!node.is_leaf) {
 		// We know that keys[i_key - 1] < key < keys[i_key], so the key (if it
 		// exists) will be in the i_key-th child's subtree.
 		return btree_get_at_node(btree, node.children[i_key], key, value);
+	} else {
+		return false;
 	}
 }
 
