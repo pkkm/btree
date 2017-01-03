@@ -24,17 +24,21 @@ static int btree_key_cmp(BtreeKey a, BtreeKey b) {
 
 enum {
 	BTREE_BLOCK_SIZE = 512,
+
 	BTREE_MAX_POSSIBLE_KEYS =
 		(BTREE_BLOCK_SIZE
 		 - sizeof(uint8_t) - sizeof(uint16_t) - sizeof(BtreePtr))
 		/ (sizeof(BtreeKey) + sizeof(BtreeValue) + sizeof(BtreePtr)),
 	BTREE_MIN_KEYS = BTREE_MAX_POSSIBLE_KEYS / 2,
-	BTREE_MAX_KEYS = BTREE_MIN_KEYS * 2
+	BTREE_MAX_KEYS = BTREE_MIN_KEYS * 2,
 	// The assignment requires BTREE_MAX_KEYS = BTREE_MIN_KEYS * 2, but we could
 	// also use BTREE_MAX_KEYS = BTREE_MAX_POSSIBLE_KEYS, BTREE_MIN_KEYS =
 	// BTREE_MAX_KEYS / 2 + BTREE_MAX_KEYS % 2 (division by 2, but rounded up
 	// instead of down). Source:
 	// <https://en.wikipedia.org/wiki/B-tree#Definition>.
+
+	BTREE_MIN_CHILDREN = BTREE_MIN_KEYS + 1,
+	BTREE_MAX_CHILDREN = BTREE_MAX_KEYS + 1
 };
 
 typedef struct {
@@ -45,9 +49,9 @@ typedef struct {
 typedef struct {
 	bool is_leaf; // Serialized as uint8_t.
 	uint16_t n_keys;
-	// Invariant: keys[i - 1] < (all keys in subtree at children[i]) < keys[i].
+	// Invariant: keys in children[i] < keys[i] < keys in children[i + 1].
 	BtreeKey keys[BTREE_MAX_KEYS];
-	BtreePtr children[BTREE_MAX_KEYS + 1];
+	BtreePtr children[BTREE_MAX_CHILDREN];
 	BtreeValue values[BTREE_MAX_KEYS]; // Data associated with keys.
 } BtreeNode;
 
@@ -119,7 +123,7 @@ static BtreeNode btree_read_node(Btree *btree, BtreePtr ptr) {
 	DESERIALIZE(pos, node.n_keys, uint16_t);
 	for (int i_key = 0; i_key < BTREE_MAX_KEYS; i_key++)
 		DESERIALIZE(pos, node.keys[i_key], BtreeKey);
-	for (int i_child = 0; i_child < BTREE_MAX_KEYS + 1; i_child++)
+	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
 		DESERIALIZE(pos, node.children[i_child], BtreePtr);
 	for (int i_value = 0; i_value < BTREE_MAX_KEYS; i_value++)
 		DESERIALIZE(pos, node.values[i_value], BtreeValue);
@@ -144,7 +148,7 @@ static void btree_write_node(Btree *btree, BtreeNode node, BtreePtr ptr) {
 	SERIALIZE(pos, node.n_keys, uint16_t);
 	for (int i_key = 0; i_key < BTREE_MAX_KEYS; i_key++)
 		SERIALIZE(pos, node.keys[i_key], BtreeKey);
-	for (int i_child = 0; i_child < BTREE_MAX_KEYS + 1; i_child++)
+	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
 		SERIALIZE(pos, node.children[i_child], BtreePtr);
 	for (int i_value = 0; i_value < BTREE_MAX_KEYS; i_value++)
 		SERIALIZE(pos, node.values[i_value], BtreeValue);
@@ -169,7 +173,7 @@ Btree *btree_new(const char *file_name) {
 	BtreeNode root;
 	root.n_keys = 0;
 	root.is_leaf = true;
-	for (int i_child = 0; i_child <= BTREE_MAX_KEYS; i_child++)
+	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
 		root.children[i_child] = BTREE_NULL;
 	btree_write_node(btree, root, 1);
 
