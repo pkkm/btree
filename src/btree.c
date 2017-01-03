@@ -228,11 +228,14 @@ static void btree_compensate(BtreeNode *parent, int i_separator_in_parent,
 	xassert(1, left->n_items < BTREE_MAX_KEYS ||
 	        right->n_items < BTREE_MAX_KEYS);
 
-	// TODO what if n_items == 0?
-	xassert(1, btree_item_cmp(left->items[left->n_items - 1],
-	                          parent->items[i_separator_in_parent]) < 0);
-	xassert(1, btree_item_cmp(parent->items[i_separator_in_parent],
-	                          right->items[0]) < 0);
+	// The nodes *left and *right don't need to have a valid number of items.
+	// Because of that, we can use this function to make them valid.
+	xassert(1, left->n_items == 0 ||
+	        btree_item_cmp(left->items[left->n_items - 1],
+	                       parent->items[i_separator_in_parent]) < 0);
+	xassert(1, right->n_items == 0 ||
+	        btree_item_cmp(parent->items[i_separator_in_parent],
+	                       right->items[0]) < 0);
 
 	xassert(1, (left->is_leaf && right->is_leaf &&
 	            new_right_child == BTREE_NULL) ||
@@ -313,6 +316,10 @@ static void btree_compensate(BtreeNode *parent, int i_separator_in_parent,
 	for (int i = 0; i < right->n_items + 1; i++)
 		right->children[i] = all_children[i_next_child++];
 	xassert(1, i_next_child == n_all_children);
+
+	// Check node validity.
+	xassert(2, btree_node_valid(*left, false) &&
+	        btree_node_valid(*right, false));
 }
 
 typedef struct {
@@ -326,8 +333,10 @@ static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
 	BtreePtr node_ptr = cache[node_depth].ptr;
 	BtreeNode node = cache[node_depth].node;
 
-	xassert(1, (!node.is_leaf && new_right_child != BTREE_NULL) ||
-	        (node.is_leaf && new_right_child == BTREE_NULL));
+	xassert(1, (node_ptr == 1 && node_depth == 0) ||
+	        (node_ptr != 1 && node_depth > 0));
+	xassert(1, (node.is_leaf && new_right_child == BTREE_NULL) ||
+	        (!node.is_leaf && new_right_child != BTREE_NULL));
 
 	// If there's free space in the node, just insert the item.
 	if (node.n_items < BTREE_MAX_KEYS) {
@@ -347,6 +356,9 @@ static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
 	}
 
 	// The node is full. Try to compensate (move some items to a sibling node).
+
+	// TODO handle the case of being at the root.
+	assert(node_ptr != 1);
 
 	BtreePtr parent_ptr = cache[node_depth - 1].ptr;
 	BtreeNode parent = cache[node_depth - 1].node;
