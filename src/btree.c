@@ -131,12 +131,12 @@ static BtreeNode btree_read_node(Btree *btree, BtreePtr ptr) {
 	BtreeNode node;
 	DESERIALIZE(pos, node.is_leaf, uint8_t);
 	DESERIALIZE(pos, node.n_items, uint16_t);
-	for (int i_key = 0; i_key < BTREE_MAX_KEYS; i_key++)
-		DESERIALIZE(pos, node.items[i_key].key, BtreeKey);
+	for (int i_item = 0; i_item < BTREE_MAX_KEYS; i_item++) {
+		DESERIALIZE(pos, node.items[i_item].key, BtreeKey);
+		DESERIALIZE(pos, node.items[i_item].value, BtreeKey);
+	}
 	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
 		DESERIALIZE(pos, node.children[i_child], BtreePtr);
-	for (int i_value = 0; i_value < BTREE_MAX_KEYS; i_value++)
-		DESERIALIZE(pos, node.items[i_value].value, BtreeValue);
 
 	xassert(2, btree_node_valid(node, ptr == 1));
 	return node;
@@ -156,12 +156,12 @@ static void btree_write_node(Btree *btree, BtreeNode node, BtreePtr ptr) {
 
 	SERIALIZE(pos, node.is_leaf ? 1 : 0, uint8_t);
 	SERIALIZE(pos, node.n_items, uint16_t);
-	for (int i_key = 0; i_key < BTREE_MAX_KEYS; i_key++)
-		SERIALIZE(pos, node.items[i_key].key, BtreeKey);
+	for (int i_item = 0; i_item < BTREE_MAX_KEYS; i_item++) {
+		SERIALIZE(pos, node.items[i_item].key, BtreeKey);
+		SERIALIZE(pos, node.items[i_item].value, BtreeKey);
+	}
 	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
 		SERIALIZE(pos, node.children[i_child], BtreePtr);
-	for (int i_value = 0; i_value < BTREE_MAX_KEYS; i_value++)
-		SERIALIZE(pos, node.items[i_value].value, BtreeValue);
 
 	fs_write(btree->file, block, ptr * BTREE_BLOCK_SIZE, sizeof(node));
 }
