@@ -48,34 +48,43 @@ typedef struct {
 } BtreeSuperblock;
 
 typedef struct {
+	BtreeKey key;
+	BtreeValue value;
+} BtreeItem;
+
+static int btree_item_cmp(BtreeItem a, BtreeItem b) {
+	// Convenience function.
+	return btree_key_cmp(a.key, b.key);
+}
+
+typedef struct {
 	bool is_leaf; // Serialized as uint8_t.
-	uint16_t n_keys;
+	uint16_t n_items;
 	// Invariant: keys in children[i] < keys[i] < keys in children[i + 1].
-	BtreeKey keys[BTREE_MAX_KEYS];
+	BtreeItem items[BTREE_MAX_KEYS];
 	BtreePtr children[BTREE_MAX_CHILDREN];
-	BtreeValue values[BTREE_MAX_KEYS]; // Data associated with keys.
 } BtreeNode;
 
 static bool btree_node_valid(BtreeNode node, bool is_root) {
-	if (node.n_keys > BTREE_MAX_KEYS)
+	if (node.n_items > BTREE_MAX_KEYS)
 		return false;
 
-	if (!is_root && node.n_keys < BTREE_MIN_KEYS)
+	if (!is_root && node.n_items < BTREE_MIN_KEYS)
 		return false;
 
 	if (!node.is_leaf) {
-		for (int i_child = 0; i_child <= node.n_keys; i_child++) {
+		for (int i_child = 0; i_child <= node.n_items; i_child++) {
 			if (node.children[i_child] == BTREE_NULL)
 				return false;
 		}
 	}
 
 	// Check that keys are in ascending order.
-	BtreeKey prev_key = node.keys[0];
-	for (int i_key = 1; i_key < node.n_keys; i_key++) {
-		if (btree_key_cmp(prev_key, node.keys[i_key]) >= 0)
+	BtreeItem prev_item = node.items[0];
+	for (int i_item = 1; i_item < node.n_items; i_item++) {
+		if (btree_item_cmp(prev_item, node.items[i_item]) >= 0)
 			return false;
-		prev_key = node.keys[i_key];
+		prev_item = node.items[i_item];
 	}
 
 	return true;
@@ -121,13 +130,13 @@ static BtreeNode btree_read_node(Btree *btree, BtreePtr ptr) {
 
 	BtreeNode node;
 	DESERIALIZE(pos, node.is_leaf, uint8_t);
-	DESERIALIZE(pos, node.n_keys, uint16_t);
+	DESERIALIZE(pos, node.n_items, uint16_t);
 	for (int i_key = 0; i_key < BTREE_MAX_KEYS; i_key++)
-		DESERIALIZE(pos, node.keys[i_key], BtreeKey);
+		DESERIALIZE(pos, node.items[i_key].key, BtreeKey);
 	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
 		DESERIALIZE(pos, node.children[i_child], BtreePtr);
 	for (int i_value = 0; i_value < BTREE_MAX_KEYS; i_value++)
-		DESERIALIZE(pos, node.values[i_value], BtreeValue);
+		DESERIALIZE(pos, node.items[i_value].value, BtreeValue);
 
 	xassert(2, btree_node_valid(node, ptr == 1));
 	return node;
@@ -146,13 +155,13 @@ static void btree_write_node(Btree *btree, BtreeNode node, BtreePtr ptr) {
 	void *pos = block;
 
 	SERIALIZE(pos, node.is_leaf ? 1 : 0, uint8_t);
-	SERIALIZE(pos, node.n_keys, uint16_t);
+	SERIALIZE(pos, node.n_items, uint16_t);
 	for (int i_key = 0; i_key < BTREE_MAX_KEYS; i_key++)
-		SERIALIZE(pos, node.keys[i_key], BtreeKey);
+		SERIALIZE(pos, node.items[i_key].key, BtreeKey);
 	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
 		SERIALIZE(pos, node.children[i_child], BtreePtr);
 	for (int i_value = 0; i_value < BTREE_MAX_KEYS; i_value++)
-		SERIALIZE(pos, node.values[i_value], BtreeValue);
+		SERIALIZE(pos, node.items[i_value].value, BtreeValue);
 
 	fs_write(btree->file, block, ptr * BTREE_BLOCK_SIZE, sizeof(node));
 }
@@ -172,7 +181,7 @@ Btree *btree_new(const char *file_name) {
 	btree_write_superblock(btree);
 
 	BtreeNode root;
-	root.n_keys = 0;
+	root.n_items = 0;
 	root.is_leaf = true;
 	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
 		root.children[i_child] = BTREE_NULL;
@@ -212,91 +221,68 @@ static void btree_dealloc_node(Btree *btree, BtreePtr ptr) {
 	btree->superblock.free_list_head = ptr;
 }
 
-static void btree_compensate(BtreeNode *parent, int i_separating_key_in_parent,
+static void btree_compensate(BtreeNode *parent, int i_separator_in_parent,
                              BtreeNode *left, BtreeNode *right,
-                             BtreeKey new_key, BtreeValue new_value,
-                             BtreePtr new_right_child,
-							 bool new_key_in_left, int i_new_key) {
-	xassert(1, left->n_keys < BTREE_MAX_KEYS || right->n_keys < BTREE_MAX_KEYS);
+                             BtreeItem new_item, BtreePtr new_right_child,
+							 bool new_item_in_left, int i_new_item) {
+	xassert(1, left->n_items < BTREE_MAX_KEYS ||
+	        right->n_items < BTREE_MAX_KEYS);
 
-	xassert(1, btree_key_cmp(left->keys[left->n_keys - 1],
-	                         parent->keys[i_separating_key_in_parent]) < 0);
-	xassert(1, btree_key_cmp(parent->keys[i_separating_key_in_parent],
-	                         right->keys[0]) < 0);
+	// TODO what if n_items == 0?
+	xassert(1, btree_item_cmp(left->items[left->n_items - 1],
+	                          parent->items[i_separator_in_parent]) < 0);
+	xassert(1, btree_item_cmp(parent->items[i_separator_in_parent],
+	                          right->items[0]) < 0);
 
 	xassert(1, (left->is_leaf && right->is_leaf &&
 	            new_right_child == BTREE_NULL) ||
 	        (!left->is_leaf && !right->is_leaf &&
 	         new_right_child != BTREE_NULL));
 
-	// Collect the keys of both nodes, the key separating them and the key
-	// to insert (new_key) into an array.
+	// Collect the items of both nodes, the item separating them and the item to
+	// insert (new_item) into an array.
 
-	int i_new_key_in_all = new_key_in_left
-		? i_new_key : left->n_keys + 1 + i_new_key;
+	int i_new_item_in_all = new_item_in_left
+		? i_new_item : left->n_items + 1 + i_new_item;
 
-	struct {
-		BtreeKey key;
-		BtreeValue value;
-	} all_keys[BTREE_MAX_KEYS * 2 + 2];
-	int n_all_keys = 0;
+	BtreeItem all_items[BTREE_MAX_KEYS * 2 + 2];
+	int n_all_items = 0;
 
-	for (int i = 0; i < left->n_keys; i++) {
-		if (n_all_keys == i_new_key_in_all) {
-			all_keys[n_all_keys].key = new_key;
-			all_keys[n_all_keys].value = new_value;
-			n_all_keys++;
-		}
-
-		all_keys[n_all_keys].key = left->keys[i];
-		all_keys[n_all_keys].value = left->values[i];
-		n_all_keys++;
+	for (int i = 0; i < left->n_items; i++) {
+		if (n_all_items == i_new_item_in_all)
+			all_items[n_all_items++] = new_item;
+		all_items[n_all_items++] = left->items[i];
 	}
 
-	if (n_all_keys == i_new_key_in_all) {
-		all_keys[n_all_keys].key = new_key;
-		all_keys[n_all_keys].value = new_value;
-		n_all_keys++;
+	if (n_all_items == i_new_item_in_all)
+		all_items[n_all_items++] = new_item;
+	all_items[n_all_items++] = parent->items[i_separator_in_parent];
+
+	for (int i = 0; i < right->n_items; i++) {
+		if (n_all_items == i_new_item_in_all)
+			all_items[n_all_items++] = new_item;
+		all_items[n_all_items++] = right->items[i];
 	}
 
-	all_keys[n_all_keys].key = parent->keys[i_separating_key_in_parent];
-	all_keys[n_all_keys].value = parent->values[i_separating_key_in_parent];
-	n_all_keys++;
-
-	for (int i = 0; i < right->n_keys; i++) {
-		if (n_all_keys == i_new_key_in_all) {
-			all_keys[n_all_keys].key = new_key;
-			all_keys[n_all_keys].value = new_value;
-			n_all_keys++;
-		}
-
-		all_keys[n_all_keys].key = right->keys[i];
-		all_keys[n_all_keys].value = right->values[i];
-		n_all_keys++;
-	}
-
-	if (n_all_keys == i_new_key_in_all) {
-		all_keys[n_all_keys].key = new_key;
-		all_keys[n_all_keys].value = new_value;
-		n_all_keys++;
-	}
+	if (n_all_items == i_new_item_in_all)
+		all_items[n_all_items++] = new_item;
 
 	// Collect the children of both nodes and new_right_child into an array.
 
-	int i_new_child = i_new_key + 1;
-	int i_new_child_in_all = new_key_in_left
-		? i_new_child : left->n_keys + 1 + i_new_child;
+	int i_new_child = i_new_item + 1;
+	int i_new_child_in_all = new_item_in_left
+		? i_new_child : left->n_items + 1 + i_new_child;
 
 	BtreePtr all_children[BTREE_MAX_CHILDREN * 2 + 1];
 	int n_all_children = 0;
 
-	for (int i = 0; i < left->n_keys + 1; i++) {
+	for (int i = 0; i < left->n_items + 1; i++) {
 		if (n_all_children == i_new_child_in_all)
 			all_children[n_all_children++] = new_right_child;
 		all_children[n_all_children++] = left->children[i];
 	}
 
-	for (int i = 0; i < right->n_keys + 1; i++) {
+	for (int i = 0; i < right->n_items + 1; i++) {
 		if (n_all_children == i_new_child_in_all)
 			all_children[n_all_children++] = new_right_child;
 		all_children[n_all_children++] = right->children[i];
@@ -305,37 +291,26 @@ static void btree_compensate(BtreeNode *parent, int i_separating_key_in_parent,
 	if (n_all_children == i_new_child_in_all)
 		all_children[n_all_children++] = new_right_child;
 
-	// Divide the keys among the left node, the place for a key in the
+	// Divide the items among the left node, the place for an item in the
 	// parent, and the right node.
 
+	left->n_items = (n_all_items - 1) / 2;
+	right->n_items = n_all_items - 1 - left->n_items;
+
 	int i_next_key = 0;
-
-	left->n_keys = (n_all_keys - 1) / 2;
-	for (int i = 0; i < left->n_keys; i++) {
-		left->keys[i] = all_keys[i_next_key].key;
-		left->values[i] = all_keys[i_next_key].value;
-		i_next_key++;
-	}
-
-	parent->keys[i_separating_key_in_parent] = all_keys[i_next_key].key;
-	parent->values[i_separating_key_in_parent] = all_keys[i_next_key].value;
-	i_next_key++;
-
-	right->n_keys = n_all_keys - 1 - left->n_keys;
-	for (int i = 0; i < right->n_keys; i++) {
-		right->keys[i] = all_keys[i_next_key].key;
-		right->values[i] = all_keys[i_next_key].value;
-		i_next_key++;
-	}
-
-	xassert(1, i_next_key == n_all_keys);
+	for (int i = 0; i < left->n_items; i++)
+		left->items[i] = all_items[i_next_key++];
+	parent->items[i_separator_in_parent] = all_items[i_next_key++];
+	for (int i = 0; i < right->n_items; i++)
+		right->items[i] = all_items[i_next_key++];
+	xassert(1, i_next_key == n_all_items);
 
 	// Divide the children between the nodes.
 
 	int i_next_child = 0;
-	for (int i = 0; i < left->n_keys + 1; i++)
+	for (int i = 0; i < left->n_items + 1; i++)
 		left->children[i] = all_children[i_next_child++];
-	for (int i = 0; i < right->n_keys + 1; i++)
+	for (int i = 0; i < right->n_items + 1; i++)
 		right->children[i] = all_children[i_next_child++];
 	xassert(1, i_next_child == n_all_children);
 }
@@ -345,36 +320,33 @@ typedef struct {
 	BtreeNode node;
 } BtreeNodeCache;
 
-static void btree_insert_upwards(Btree *btree,
-                                 BtreeKey key, BtreeValue value,
-                                 BtreePtr right_child, int i_key,
+static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
+                                 BtreePtr new_right_child, int i_new_item,
                                  BtreeNodeCache *cache, int node_depth) {
 	BtreePtr node_ptr = cache[node_depth].ptr;
 	BtreeNode node = cache[node_depth].node;
 
-	xassert(1, (!node.is_leaf && right_child != BTREE_NULL) ||
-	        (node.is_leaf && right_child == BTREE_NULL));
+	xassert(1, (!node.is_leaf && new_right_child != BTREE_NULL) ||
+	        (node.is_leaf && new_right_child == BTREE_NULL));
 
-	// If there's free space in the node, just insert the key.
-	if (node.n_keys < BTREE_MAX_KEYS) {
-		int n_keys_after = node.n_keys - i_key;
-		if (n_keys_after > 0) {
-			memmove(&node.keys[i_key + 1], &node.keys[i_key],
-			        n_keys_after * sizeof(node.keys[0]));
-			memmove(&node.values[i_key + 1], &node.values[i_key],
-			        n_keys_after * sizeof(node.values[0]));
-			memmove(&node.children[i_key + 2], &node.children[i_key + 1],
-			        n_keys_after * sizeof(node.children[0]));
+	// If there's free space in the node, just insert the item.
+	if (node.n_items < BTREE_MAX_KEYS) {
+		int n_items_after = node.n_items - i_new_item;
+		if (n_items_after > 0) {
+			memmove(&node.items[i_new_item + 1], &node.items[i_new_item],
+			        n_items_after * sizeof(node.items[0]));
+			memmove(&node.children[i_new_item + 2],
+			        &node.children[i_new_item + 1],
+			        n_items_after * sizeof(node.children[0]));
 		}
 
-		node.keys[i_key] = key;
-		node.values[i_key] = value;
-		node.children[i_key + 1] = right_child;
+		node.items[i_new_item] = new_item;
+		node.children[i_new_item + 1] = new_right_child;
 		btree_write_node(btree, node, node_ptr);
 		return;
 	}
 
-	// The node is full. Try to compensate (move some keys to a sibling node).
+	// The node is full. Try to compensate (move some items to a sibling node).
 
 	BtreePtr parent_ptr = cache[node_depth - 1].ptr;
 	BtreeNode parent = cache[node_depth - 1].node;
@@ -390,10 +362,10 @@ static void btree_insert_upwards(Btree *btree,
 		BtreePtr left_sibling_ptr = parent.children[i_child_in_parent - 1];
 		BtreeNode left_sibling = btree_read_node(btree, left_sibling_ptr);
 
-		if (left_sibling.n_keys < BTREE_MAX_KEYS) {
+		if (left_sibling.n_items < BTREE_MAX_KEYS) {
 			btree_compensate(&parent, i_child_in_parent - 1,
 			                 &left_sibling, &node,
-			                 key, value, right_child, false, i_key);
+			                 new_item, new_right_child, false, i_new_item);
 			btree_write_node(btree, parent, parent_ptr);
 			btree_write_node(btree, left_sibling, left_sibling_ptr);
 			btree_write_node(btree, node, node_ptr);
@@ -405,10 +377,10 @@ static void btree_insert_upwards(Btree *btree,
 		BtreePtr right_sibling_ptr = parent.children[i_child_in_parent + 1];
 		BtreeNode right_sibling = btree_read_node(btree, right_sibling_ptr);
 
-		if (right_sibling.n_keys < BTREE_MAX_KEYS) {
+		if (right_sibling.n_items < BTREE_MAX_KEYS) {
 			btree_compensate(&parent, i_child_in_parent,
 			                 &right_sibling, &node,
-			                 key, value, right_child, true, i_key);
+			                 new_item, new_right_child, true, i_new_item);
 			btree_write_node(btree, parent, parent_ptr);
 			btree_write_node(btree, right_sibling, right_sibling_ptr);
 			btree_write_node(btree, node, node_ptr);
@@ -422,7 +394,7 @@ static void btree_insert_upwards(Btree *btree,
 	assert(false);
 }
 
-static void btree_insert_at_node(Btree *btree, BtreeKey key, BtreeValue value,
+static void btree_insert_at_node(Btree *btree, BtreeItem item,
                                  BtreeNodeCache *cache, BtreePtr node_ptr,
                                  int node_depth) {
 	BtreeNode node = btree_read_node(btree, node_ptr);
@@ -432,53 +404,56 @@ static void btree_insert_at_node(Btree *btree, BtreeKey key, BtreeValue value,
 	// TODO extract the common part of this and btree_get_at_node into a
 	// separate function.
 
-	// Index of first key which is >= `key`, or node.n_keys if there are none.
-	int i_new_key = 0;
-	while (i_new_key < node.n_keys &&
-		   btree_key_cmp(node.keys[i_new_key], key) < 0)
-		i_new_key++;
+	// Index of first key which is >= `key`, or node.n_items if there are none.
+	int i_new_item = 0;
+	while (i_new_item < node.n_items &&
+	       btree_item_cmp(node.items[i_new_item], item) < 0)
+		i_new_item++;
 
-	if (i_new_key < node.n_keys &&
-		btree_key_cmp(node.keys[i_new_key], key) == 0) {
-		// We found the key, so let's set its value.
-		node.values[i_new_key] = value;
+	if (i_new_item < node.n_items &&
+	    btree_item_cmp(node.items[i_new_item], item) == 0) {
+		// We found the exact key, so let's set its associated value.
+		node.items[i_new_item].value = item.value;
 		btree_write_node(btree, node, node_ptr);
 		return;
 	}
 
 	if (!node.is_leaf) {
-		// We know that keys[i_new_key - 1] < key < keys[i_new_key], so the key
-		// (if it exists) will be in the i_new_key-th child's subtree.
-		return btree_insert_at_node(btree, key, value, cache,
-									node.children[i_new_key], node_depth + 1);
+		// We know that keys[i_new_item - 1] < item.key < keys[i_new_item], so
+		// the item (if it exists) will be in the i_new_item-th child's subtree.
+		return btree_insert_at_node(btree, item, cache,
+		                            node.children[i_new_item], node_depth + 1);
 	}
 
-	btree_insert_upwards(btree, key, value, BTREE_NULL,
-	                     i_new_key, cache, node_depth);
+	btree_insert_upwards(btree, item, BTREE_NULL,
+	                     i_new_item, cache, node_depth);
 }
 
 void btree_insert(Btree *btree, BtreeKey key, BtreeValue value) {
+	BtreeItem item = {key, value};
 	BtreeNodeCache cache[128]; // TODO height or height + 1.
-	btree_insert_at_node(btree, key, value, cache, 1, 0);
+	btree_insert_at_node(btree, item, cache, 1, 0);
 }
 
 static bool btree_get_at_node(Btree *btree, BtreePtr node_ptr,
                               BtreeKey key, BtreeValue *value) {
 	BtreeNode node = btree_read_node(btree, node_ptr);
 
-	// Index of first key which is >= `key`, or node.n_keys if there are none.
-	int i_key = 0;
-	while (i_key < node.n_keys && btree_key_cmp(node.keys[i_key], key) < 0)
-		i_key++;
+	// Index of first key which is >= `key`, or node.n_items if there are none.
+	int i_item = 0;
+	while (i_item < node.n_items &&
+	       btree_key_cmp(node.items[i_item].key, key) < 0)
+		i_item++;
 
-	if (i_key < node.n_keys && btree_key_cmp(node.keys[i_key], key) == 0) {
+	if (i_item < node.n_items &&
+	    btree_key_cmp(node.items[i_item].key, key) == 0) {
 		// We found the key.
-		*value = node.values[i_key];
+		*value = node.items[i_item].value;
 		return true;
 	} else if (!node.is_leaf) {
-		// We know that keys[i_key - 1] < key < keys[i_key], so the key (if it
-		// exists) will be in the i_key-th child's subtree.
-		return btree_get_at_node(btree, node.children[i_key], key, value);
+		// We know that keys[i_item - 1] < item.key < keys[i_item], so the key
+		// (if it exists) will be in the i_item-th child's subtree.
+		return btree_get_at_node(btree, node.children[i_item], key, value);
 	} else {
 		return false;
 	}
@@ -497,15 +472,18 @@ static void btree_print_at_node(Btree *btree, FILE *stream,
 	fprintf(stream, "%*sNode %" BTREE_PTR_PRINT "\n",
 	        level * INDENT_WIDTH, "", node_ptr);
 
-	for (int i_key = 0; i_key < node.n_keys; i_key++) {
-		if (!node.is_leaf)
-			btree_print_at_node(btree, stream, node.children[i_key], level + 1);
+	for (int i_item = 0; i_item < node.n_items; i_item++) {
+		if (!node.is_leaf) {
+			btree_print_at_node(btree, stream, node.children[i_item],
+			                    level + 1);
+		}
 		printf("%*sKey %" BTREE_KEY_PRINT ", value %" BTREE_VALUE_PRINT "\n",
-		       level * INDENT_WIDTH, "", node.keys[i_key], node.values[i_key]);
+		       level * INDENT_WIDTH, "",
+		       node.items[i_item].key, node.items[i_item].value);
 	}
 	if (!node.is_leaf) {
 		btree_print_at_node(btree, stream,
-		                    node.children[node.n_keys + 1], level + 1);
+		                    node.children[node.n_items + 1], level + 1);
 	}
 }
 
@@ -517,13 +495,13 @@ static void btree_walk_at_node(Btree *btree, BtreePtr node_ptr,
                                void (*callback)(BtreeKey, BtreeValue)) {
 	BtreeNode node = btree_read_node(btree, node_ptr);
 
-	for (int i_key = 0; i_key < node.n_keys; i_key++) {
+	for (int i_item = 0; i_item < node.n_items; i_item++) {
 		if (!node.is_leaf)
-			btree_walk_at_node(btree, node.children[i_key], callback);
-		callback(node.keys[i_key], node.values[i_key]);
+			btree_walk_at_node(btree, node.children[i_item], callback);
+		callback(node.items[i_item].key, node.items[i_item].value);
 	}
 	if (!node.is_leaf)
-		btree_walk_at_node(btree, node.children[node.n_keys + 1], callback);
+		btree_walk_at_node(btree, node.children[node.n_items + 1], callback);
 }
 
 void btree_walk(Btree *btree, void (*callback)(BtreeKey, BtreeValue)) {
