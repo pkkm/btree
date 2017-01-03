@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <string.h>
 #include "xassert.h"
 #include "fs.h"
 
@@ -211,7 +212,193 @@ static void btree_dealloc_node(Btree *btree, BtreePtr ptr) {
 	btree->superblock.free_list_head = ptr;
 }
 
-void btree_insert(Btree *btree, BtreeKey key, BtreeValue value);
+static void btree_compensate(BtreeNode *parent, int i_key_in_parent,
+                             BtreeNode *left, BtreeNode *right,
+                             BtreeKey new_key, BtreeValue new_value,
+							 bool new_key_in_left, int i_new_key) {
+	xassert(1, left->n_keys < BTREE_MAX_KEYS || right->n_keys < BTREE_MAX_KEYS);
+	xassert(1, btree_key_cmp(left->keys[left->n_keys - 1],
+	                         parent->keys[i_key_in_parent]) < 0);
+	xassert(1, btree_key_cmp(parent->keys[i_key_in_parent],
+	                         right->keys[0]) < 0);
+
+	// Collect the keys of both nodes, the key separating them and the key
+	// to insert (new_key) into an array.
+
+	struct {
+		BtreeKey key;
+		BtreeValue value;
+	} all_keys[BTREE_MAX_KEYS * 2 + 2];
+	int n_all_keys = 0;
+
+	int i_new_key_in_all = new_key_in_left
+		? i_new_key : left->n_keys + 1 + i_new_key;
+
+	for (int i = 0; i < left->n_keys; i++) {
+		if (n_all_keys == i_new_key_in_all) {
+			all_keys[n_all_keys].key = new_key;
+			all_keys[n_all_keys].value = new_value;
+			n_all_keys++;
+		}
+
+		all_keys[n_all_keys].key = left->keys[i];
+		all_keys[n_all_keys].value = left->values[i];
+		n_all_keys++;
+	}
+
+	if (n_all_keys == i_new_key_in_all) {
+		all_keys[n_all_keys].key = new_key;
+		all_keys[n_all_keys].value = new_value;
+		n_all_keys++;
+	}
+
+	all_keys[n_all_keys].key = parent->keys[i_key_in_parent];
+	all_keys[n_all_keys].value = parent->values[i_key_in_parent];
+	n_all_keys++;
+
+	for (int i = 0; i < right->n_keys; i++) {
+		if (n_all_keys == i_new_key_in_all) {
+			all_keys[n_all_keys].key = new_key;
+			all_keys[n_all_keys].value = new_value;
+			n_all_keys++;
+		}
+
+		all_keys[n_all_keys].key = right->keys[i];
+		all_keys[n_all_keys].value = right->values[i];
+		n_all_keys++;
+	}
+
+	if (n_all_keys == i_new_key_in_all) {
+		all_keys[n_all_keys].key = new_key;
+		all_keys[n_all_keys].value = new_value;
+		n_all_keys++;
+	}
+
+	// Divide the keys among the left node, the place for a key in the
+	// parent, and the right node.
+
+	left->n_keys = (n_all_keys - 1) / 2;
+	for (int i = 0; i < left->n_keys; i++) {
+		left->keys[i] = all_keys[i].key;
+		left->values[i] = all_keys[i].value;
+	}
+
+	parent->keys[i_key_in_parent] = all_keys[left->n_keys].key;
+	parent->values[i_key_in_parent] = all_keys[left->n_keys].value;
+
+	right->n_keys = n_all_keys - 1 - left->n_keys;
+	for (int i = 0; i < right->n_keys; i++) {
+		right->keys[i] = all_keys[left->n_keys + 1 + i].key;
+		right->values[i] = all_keys[left->n_keys + 1 + i].value;
+	}
+}
+
+typedef struct {
+	BtreePtr ptr;
+	BtreeNode node;
+} BtreeNodeCache;
+
+static void btree_insert_at_node(Btree *btree, BtreeKey key, BtreeValue value,
+                                 BtreeNodeCache *cache, BtreePtr node_ptr,
+                                 int node_depth) {
+	BtreeNode node = btree_read_node(btree, node_ptr);
+	cache[node_depth].ptr = node_ptr;
+	cache[node_depth].node = node;
+
+	// TODO extract this function and btree_get_at_node's key search code into a
+	// separate function.
+
+	// Index of first key which is >= `key`, or node.n_keys if there are none.
+	int i_new_key = 0;
+	while (i_new_key < node.n_keys &&
+		   btree_key_cmp(node.keys[i_new_key], key) < 0)
+		i_new_key++;
+
+	if (i_new_key < node.n_keys &&
+		btree_key_cmp(node.keys[i_new_key], key) == 0) {
+		// We found the key, so let's set its value.
+		node.values[i_new_key] = value;
+		btree_write_node(btree, node, node_ptr);
+		return;
+	}
+
+	if (!node.is_leaf) {
+		// We know that keys[i_new_key - 1] < key < keys[i_new_key], so the key
+		// (if it exists) will be in the i_new_key-th child's subtree.
+		return btree_insert_at_node(btree, key, value, cache,
+									node.children[i_new_key], node_depth + 1);
+	}
+
+	// We're at a leaf and haven't found the key.
+
+	// If there's free space in the node, just insert the key.
+	if (node.n_keys < BTREE_MAX_KEYS) {
+		int n_keys_after = node.n_keys - i_new_key;
+		if (n_keys_after > 0) {
+			memmove(&node.keys[i_new_key + 1], &node.keys[i_new_key],
+			        n_keys_after * sizeof(node.keys[0]));
+			memmove(&node.values[i_new_key + 1], &node.values[i_new_key],
+			        n_keys_after * sizeof(node.values[0]));
+		}
+
+		node.keys[i_new_key] = key;
+		node.values[i_new_key] = value;
+		btree_write_node(btree, node, node_ptr);
+		return;
+	}
+
+	// The node is full. Try to compensate (move some keys to a sibling node).
+
+	BtreePtr parent_ptr = cache[node_depth - 1].ptr;
+	BtreeNode parent = cache[node_depth - 1].node;
+
+	int i_child_in_parent = 0;
+	while (i_child_in_parent < BTREE_MAX_CHILDREN &&
+		   parent.children[i_child_in_parent] != node_ptr)
+		i_child_in_parent++;
+	// Defensive programming in case the structure is malformed.
+	xassert(1, i_child_in_parent < BTREE_MAX_CHILDREN);
+
+	if (i_child_in_parent > 0) { // Has a left sibling.
+		BtreePtr left_sibling_ptr = parent.children[i_child_in_parent - 1];
+		BtreeNode left_sibling = btree_read_node(btree, left_sibling_ptr);
+
+		if (left_sibling.n_keys < BTREE_MAX_KEYS) {
+			btree_compensate(&parent, i_child_in_parent - 1,
+			                 &left_sibling, &node,
+			                 key, value, false, i_new_key);
+			btree_write_node(btree, parent, parent_ptr);
+			btree_write_node(btree, left_sibling, left_sibling_ptr);
+			btree_write_node(btree, node, node_ptr);
+			return;
+		}
+	}
+
+	if (i_child_in_parent < BTREE_MAX_CHILDREN - 1) { // Has a right sibling.
+		BtreePtr right_sibling_ptr = parent.children[i_child_in_parent + 1];
+		BtreeNode right_sibling = btree_read_node(btree, right_sibling_ptr);
+
+		if (right_sibling.n_keys < BTREE_MAX_KEYS) {
+			btree_compensate(&parent, i_child_in_parent,
+			                 &right_sibling, &node,
+			                 key, value, true, i_new_key);
+			btree_write_node(btree, parent, parent_ptr);
+			btree_write_node(btree, right_sibling, right_sibling_ptr);
+			btree_write_node(btree, node, node_ptr);
+			return;
+		}
+	}
+
+	// Can't compensate. We'll have to split the node.
+
+	// TODO
+	assert(false);
+}
+
+void btree_insert(Btree *btree, BtreeKey key, BtreeValue value) {
+	BtreeNodeCache cache[128]; // TODO height or height + 1.
+	btree_insert_at_node(btree, key, value, cache, 1, 0);
+}
 
 static bool btree_get_at_node(Btree *btree, BtreePtr node_ptr,
                               BtreeKey key, BtreeValue *value) {
