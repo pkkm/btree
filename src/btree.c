@@ -221,7 +221,7 @@ static void btree_dealloc_node(Btree *btree, BtreePtr ptr) {
 	btree->superblock.free_list_head = ptr;
 }
 
-static void btree_compensate(BtreeNode *parent, int i_separator_in_parent,
+static void btree_compensate(BtreeItem *separator_in_parent,
                              BtreeNode *left, BtreeNode *right,
                              BtreeItem new_item, BtreePtr new_right_child,
 							 bool new_item_in_left, int i_new_item) {
@@ -232,9 +232,9 @@ static void btree_compensate(BtreeNode *parent, int i_separator_in_parent,
 	// Because of that, we can use this function to make them valid.
 	xassert(1, left->n_items == 0 ||
 	        btree_item_cmp(left->items[left->n_items - 1],
-	                       parent->items[i_separator_in_parent]) < 0);
+	                       *separator_in_parent) < 0);
 	xassert(1, right->n_items == 0 ||
-	        btree_item_cmp(parent->items[i_separator_in_parent],
+	        btree_item_cmp(*separator_in_parent,
 	                       right->items[0]) < 0);
 
 	xassert(1, (left->is_leaf && right->is_leaf &&
@@ -259,7 +259,7 @@ static void btree_compensate(BtreeNode *parent, int i_separator_in_parent,
 
 	if (n_all_items == i_new_item_in_all)
 		all_items[n_all_items++] = new_item;
-	all_items[n_all_items++] = parent->items[i_separator_in_parent];
+	all_items[n_all_items++] = *separator_in_parent;
 
 	for (int i = 0; i < right->n_items; i++) {
 		if (n_all_items == i_new_item_in_all)
@@ -303,7 +303,7 @@ static void btree_compensate(BtreeNode *parent, int i_separator_in_parent,
 	int i_next_key = 0;
 	for (int i = 0; i < left->n_items; i++)
 		left->items[i] = all_items[i_next_key++];
-	parent->items[i_separator_in_parent] = all_items[i_next_key++];
+	*separator_in_parent = all_items[i_next_key++];
 	for (int i = 0; i < right->n_items; i++)
 		right->items[i] = all_items[i_next_key++];
 	xassert(1, i_next_key == n_all_items);
@@ -327,11 +327,20 @@ typedef struct {
 	BtreeNode node;
 } BtreeNodeCache;
 
+static void btree_array_insert(void *array, size_t n_elems_before_insert,
+                               size_t elem_size, void *new, size_t i_new) {
+	xassert(1, i_new <= n_elems_before_insert);
+	memmove((char *) array + (i_new + 1) * elem_size,
+			(char *) array + i_new * elem_size,
+			(n_elems_before_insert - i_new) * elem_size);
+	memcpy((char *) array + i_new * elem_size, new, elem_size);
+}
+
 static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
-                                 BtreePtr new_right_child, int i_new_item,
+                                 BtreePtr new_right_child, int i_in_node,
                                  BtreeNodeCache *cache, int node_depth) {
-	// Insert new_item into the node stored in cache[node_depth]. Recurse
-	// upwards the tree (using the cache) if necessary.
+	// Insert new_item into the node stored in cache[node_depth] on position
+	// i_in_node. Recurse upwards the tree (using the cache) if necessary.
 
 	BtreePtr node_ptr = cache[node_depth].ptr;
 	BtreeNode node = cache[node_depth].node;
@@ -343,17 +352,11 @@ static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
 
 	// If there's free space in the node, just insert the item.
 	if (node.n_items < BTREE_MAX_KEYS) {
-		int n_items_after = node.n_items - i_new_item;
-		if (n_items_after > 0) {
-			memmove(&node.items[i_new_item + 1], &node.items[i_new_item],
-			        n_items_after * sizeof(node.items[0]));
-			memmove(&node.children[i_new_item + 2],
-			        &node.children[i_new_item + 1],
-			        n_items_after * sizeof(node.children[0]));
-		}
-
-		node.items[i_new_item] = new_item;
-		node.children[i_new_item + 1] = new_right_child;
+		btree_array_insert(node.items, node.n_items, sizeof(node.items[0]),
+						   &new_item, i_in_node);
+		btree_array_insert(node.children, node.n_items + 1,
+		                   sizeof(node.children[0]),
+						   &new_right_child, i_in_node + 1);
 		btree_write_node(btree, node, node_ptr);
 		return;
 	}
@@ -378,9 +381,9 @@ static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
 		BtreeNode left_sibling = btree_read_node(btree, left_sibling_ptr);
 
 		if (left_sibling.n_items < BTREE_MAX_KEYS) {
-			btree_compensate(&parent, i_child_in_parent - 1,
+			btree_compensate(&parent.items[i_child_in_parent - 1],
 			                 &left_sibling, &node,
-			                 new_item, new_right_child, false, i_new_item);
+			                 new_item, new_right_child, false, i_in_node);
 			btree_write_node(btree, parent, parent_ptr);
 			btree_write_node(btree, left_sibling, left_sibling_ptr);
 			btree_write_node(btree, node, node_ptr);
@@ -393,9 +396,9 @@ static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
 		BtreeNode right_sibling = btree_read_node(btree, right_sibling_ptr);
 
 		if (right_sibling.n_items < BTREE_MAX_KEYS) {
-			btree_compensate(&parent, i_child_in_parent,
+			btree_compensate(&parent.items[i_child_in_parent],
 			                 &right_sibling, &node,
-			                 new_item, new_right_child, true, i_new_item);
+			                 new_item, new_right_child, true, i_in_node);
 			btree_write_node(btree, parent, parent_ptr);
 			btree_write_node(btree, right_sibling, right_sibling_ptr);
 			btree_write_node(btree, node, node_ptr);
