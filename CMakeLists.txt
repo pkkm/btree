@@ -7,6 +7,8 @@ cmake_minimum_required(VERSION 2.6)
 
 project("btree")
 
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
 set(CMAKE_BUILD_TYPE RelWithDebInfo) # Debug, RelWithDebInfo, Release.
 #set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
