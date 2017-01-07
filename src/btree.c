@@ -330,6 +330,9 @@ typedef struct {
 static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
                                  BtreePtr new_right_child, int i_new_item,
                                  BtreeNodeCache *cache, int node_depth) {
+	// Insert new_item into the node stored in cache[node_depth]. Recurse
+	// upwards the tree (using the cache) if necessary.
+
 	BtreePtr node_ptr = cache[node_depth].ptr;
 	BtreeNode node = cache[node_depth].node;
 
@@ -406,9 +409,12 @@ static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
 	assert(false);
 }
 
-static void btree_insert_at_node(Btree *btree, BtreeItem item,
+static void btree_insert_at_node(Btree *btree, BtreeItem new_item,
                                  BtreeNodeCache *cache, BtreePtr node_ptr,
                                  int node_depth) {
+	// Recurse down the tree to find the appropriate node for new_item and
+	// insert the item there. Fill the cache while doing this.
+
 	BtreeNode node = btree_read_node(btree, node_ptr);
 	cache[node_depth].ptr = node_ptr;
 	cache[node_depth].node = node;
@@ -419,25 +425,26 @@ static void btree_insert_at_node(Btree *btree, BtreeItem item,
 	// Index of first key which is >= `key`, or node.n_items if there are none.
 	int i_new_item = 0;
 	while (i_new_item < node.n_items &&
-	       btree_item_cmp(node.items[i_new_item], item) < 0)
+	       btree_item_cmp(node.items[i_new_item], new_item) < 0)
 		i_new_item++;
 
 	if (i_new_item < node.n_items &&
-	    btree_item_cmp(node.items[i_new_item], item) == 0) {
+	    btree_item_cmp(node.items[i_new_item], new_item) == 0) {
 		// We found the exact key, so let's set its associated value.
-		node.items[i_new_item].value = item.value;
+		node.items[i_new_item].value = new_item.value;
 		btree_write_node(btree, node, node_ptr);
 		return;
 	}
 
 	if (!node.is_leaf) {
-		// We know that keys[i_new_item - 1] < item.key < keys[i_new_item], so
-		// the item (if it exists) will be in the i_new_item-th child's subtree.
-		return btree_insert_at_node(btree, item, cache,
+		// We know that keys[i_new_item - 1] < new_item.key < keys[i_new_item],
+		// so the new_item (if it exists) will be in the i_new_item-th child's
+		// subtree.
+		return btree_insert_at_node(btree, new_item, cache,
 		                            node.children[i_new_item], node_depth + 1);
 	}
 
-	btree_insert_upwards(btree, item, BTREE_NULL,
+	btree_insert_upwards(btree, new_item, BTREE_NULL,
 	                     i_new_item, cache, node_depth);
 }
 
