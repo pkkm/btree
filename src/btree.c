@@ -6,6 +6,7 @@
 #include <string.h>
 #include "xassert.h"
 #include "fs.h"
+#include "utils.h"
 
 // The first block (address 0) of the B-tree's on-disk storage is the superblock
 // (which stores metadata). The next one is the root node.
@@ -406,10 +407,39 @@ static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
 		}
 	}
 
-	// Can't compensate. We'll have to split the node.
+	// Can't compensate. We'll have to split the node (add a right sibling).
 
-	// TODO recurse upwards the tree.
-	assert(false);
+	BtreePtr new_sibling_ptr = btree_alloc_node(btree);
+	BtreeNode new_sibling = btree_read_node(btree, new_sibling_ptr);
+
+	BtreeItem all_items[BTREE_MAX_KEYS + 1];
+	memcpy(all_items, node.items, BTREE_MAX_KEYS);
+	btree_array_insert(all_items, BTREE_MAX_KEYS, sizeof(all_items[0]),
+	                   &new_item, i_in_node);
+
+	node.n_items = BTREE_MIN_KEYS;
+	memcpy(node.items, all_items, node.n_items);
+	BtreeItem separator = all_items[node.n_items];
+	new_sibling.n_items = ARRAY_LEN(all_items) - node.n_items - 1;
+	memcpy(new_sibling.items, all_items + node.n_items + 1,
+	       new_sibling.n_items);
+
+	BtreePtr all_children[BTREE_MAX_CHILDREN + 1];
+	memcpy(all_children, node.children, BTREE_MAX_KEYS);
+	btree_array_insert(all_children, BTREE_MAX_CHILDREN,
+	                   sizeof(all_children[0]),
+	                   &new_right_child, i_in_node + 1);
+
+	memcpy(node.children, all_children, node.n_items + 1);
+	memcpy(new_sibling.children, all_children + node.n_items + 1,
+	       new_sibling.n_items + 1);
+
+	btree_write_node(btree, node, node_ptr);
+	btree_write_node(btree, new_sibling, new_sibling_ptr);
+
+	btree_insert_upwards(btree, separator,
+	                     new_sibling_ptr, i_child_in_parent + 1,
+	                     cache, node_depth - 1);
 }
 
 static void btree_insert_at_node(Btree *btree, BtreeItem new_item,
