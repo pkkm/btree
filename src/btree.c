@@ -337,7 +337,7 @@ static void btree_array_insert(void *array, size_t n_elems_before_insert,
 	memcpy((char *) array + i_new * elem_size, new, elem_size);
 }
 
-static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
+static void btree_insert_up_pass(Btree *btree, BtreeItem new_item,
                                  BtreePtr new_right_child, int i_in_node,
                                  BtreeNodeCache *cache, int node_depth) {
 	// Insert new_item into the node stored in cache[node_depth] on position
@@ -437,14 +437,14 @@ static void btree_insert_upwards(Btree *btree, BtreeItem new_item,
 	btree_write_node(btree, node, node_ptr);
 	btree_write_node(btree, new_sibling, new_sibling_ptr);
 
-	btree_insert_upwards(btree, separator,
+	btree_insert_up_pass(btree, separator,
 	                     new_sibling_ptr, i_child_in_parent + 1,
 	                     cache, node_depth - 1);
 }
 
-static void btree_insert_at_node(Btree *btree, BtreeItem new_item,
-                                 BtreeNodeCache *cache, BtreePtr node_ptr,
-                                 int node_depth) {
+static void btree_insert_down_pass(Btree *btree, BtreeItem new_item,
+                                   BtreeNodeCache *cache, BtreePtr node_ptr,
+                                   int node_depth) {
 	// Recurse down the tree to find the appropriate node for new_item and
 	// insert the item there. Fill the cache while doing this.
 
@@ -473,18 +473,18 @@ static void btree_insert_at_node(Btree *btree, BtreeItem new_item,
 		// We know that keys[i_new_item - 1] < new_item.key < keys[i_new_item],
 		// so the new_item (if it exists) will be in the i_new_item-th child's
 		// subtree.
-		return btree_insert_at_node(btree, new_item, cache,
-		                            node.children[i_new_item], node_depth + 1);
+		return btree_insert_down_pass(
+			btree, new_item, cache, node.children[i_new_item], node_depth + 1);
 	}
 
-	btree_insert_upwards(btree, new_item, BTREE_NULL,
+	btree_insert_up_pass(btree, new_item, BTREE_NULL,
 	                     i_new_item, cache, node_depth);
 }
 
 void btree_insert(Btree *btree, BtreeKey key, BtreeValue value) {
 	BtreeItem item = {key, value};
 	BtreeNodeCache cache[128]; // TODO height or height + 1.
-	btree_insert_at_node(btree, item, cache, 1, 0);
+	btree_insert_down_pass(btree, item, cache, 1, 0);
 }
 
 static bool btree_get_at_node(Btree *btree, BtreePtr node_ptr,
