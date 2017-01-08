@@ -402,6 +402,7 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 	BtreePtr node_ptr = cache[node_depth].ptr;
 	BtreeNode node = cache[node_depth].node;
 
+	xassert(1, i_in_node <= node.n_items);
 	xassert(1, (node_ptr == btree->superblock.root && node_depth == 0) ||
 	        (node_ptr != btree->superblock.root && node_depth > 0));
 	xassert(1, (node.is_leaf && new_right_child == BTREE_NULL) ||
