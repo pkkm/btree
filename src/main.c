@@ -34,7 +34,7 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 	if (n_tokens == 0)
 		return;
 
-	if (strcmp(tokens[0], "get-raw") == 0) {
+	if (strcmp(tokens[0], "get") == 0) {
 		if (n_tokens != 2) {
 			fprintf(stderr, "ERROR: invalid syntax. Use: get-raw <key>\n");
 			return;
@@ -54,7 +54,7 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 			fprintf(stderr, "ERROR: The key %" BTREE_KEY_PRINT
 			        " doesn't exist in the tree.\n", key);
 		}
-	} else if (strcmp(tokens[0], "insert-raw") == 0) {
+	} else if (strcmp(tokens[0], "insert") == 0) {
 		if (n_tokens != 3) {
 			fprintf(stderr, "ERROR: invalid syntax. "
 			        "Use: insert-raw <key> <value>\n");
@@ -81,9 +81,9 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 		}
 
 		btree_set(context->btree, key, value);
-	} else if (strcmp(tokens[0], "print-raw") == 0) {
+	} else if (strcmp(tokens[0], "print") == 0) {
 		btree_print(context->btree, stdout);
-	} else if (strcmp(tokens[0], "list-raw") == 0) {
+	} else if (strcmp(tokens[0], "list") == 0) {
 		btree_walk(context->btree, &list_btree_callback, NULL);
 	} else {
 		fprintf(stderr, "ERROR: Unknown command: %s\n", tokens[0]);
