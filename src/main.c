@@ -1,6 +1,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "btree.h"
@@ -90,23 +91,42 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 	}
 }
 
-int main() {
+int main(int argc, char **argv) {
 	srand(time(NULL));
 
 	Context context = {NULL};
 	context.btree = btree_new("btree.dat");
 
-	char *line = NULL;
-	while ((line = readline("btree> "))) {
-		// For making a more advanced interactive interface, see
-		// <http://web.mit.edu/gnu/doc/html/rlman_2.html>.
+	bool interactive = (argc == 1);
+	if (interactive) {
+		char *line = NULL;
+		while ((line = readline("(btree) "))) {
+			// For making a more advanced interactive interface, see
+			// <http://web.mit.edu/gnu/doc/html/rlman_2.html>.
 
-		if (line[0] != '\0')
-			add_history(line);
+			if (line[0] != '\0')
+				add_history(line);
 
-		execute_cmd(line, &context);
+			execute_cmd(line, &context);
 
-		free(line);
+			free(line);
+		}
+	} else {
+		char *file_name = argv[1];
+		FILE *file = fopen(file_name, "r");
+		if (file == NULL) {
+			perror("ERROR: Can't open file");
+			return 1;
+		}
+
+		char *line_buffer = NULL;
+		size_t line_buffer_size = 0;
+		ssize_t n_read;
+		while ((n_read = getline(&line_buffer, &line_buffer_size, file)) > 0) {
+			printf("(btree) %s", line_buffer);
+			execute_cmd(line_buffer, &context);
+		}
+		free(line_buffer);
 	}
 
 	btree_destroy(context.btree);
