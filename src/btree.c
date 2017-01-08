@@ -368,12 +368,12 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 
 	// If there's free space in the node, just insert the item.
 	if (node.n_items < BTREE_MAX_KEYS) {
-		node.n_items++;
 		btree_array_insert(node.items, node.n_items, sizeof(node.items[0]),
 						   &new_item, i_in_node);
 		btree_array_insert(node.children, node.n_items + 1,
 		                   sizeof(node.children[0]),
 						   &new_right_child, i_in_node + 1);
+		node.n_items++;
 		btree_write_node(btree, node, node_ptr);
 		return;
 	}
