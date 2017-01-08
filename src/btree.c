@@ -356,8 +356,8 @@ static bool btree_set_try_compensate(Btree *btree,
                                      BtreeNode node, BtreePtr node_ptr,
                                      BtreeNode parent, BtreePtr parent_ptr,
                                      BtreeItem new_item,
-                                     BtreePtr new_right_child,
-                                     int i_in_node, int i_node_in_parent) {
+                                     BtreePtr new_right_child, int i_in_node,
+                                     int i_node_in_parent) {
 	if (i_node_in_parent > 0) { // Has a left sibling.
 		BtreePtr left_sibling_ptr = parent.children[i_node_in_parent - 1];
 		BtreeNode left_sibling = btree_read_node(btree, left_sibling_ptr);
@@ -379,11 +379,11 @@ static bool btree_set_try_compensate(Btree *btree,
 
 		if (right_sibling.n_items < BTREE_MAX_KEYS) {
 			btree_compensate(&parent.items[i_node_in_parent],
-			                 &right_sibling, &node,
+			                 &node, &right_sibling,
 			                 new_item, new_right_child, true, i_in_node);
 			btree_write_node(btree, parent, parent_ptr);
-			btree_write_node(btree, right_sibling, right_sibling_ptr);
 			btree_write_node(btree, node, node_ptr);
+			btree_write_node(btree, right_sibling, right_sibling_ptr);
 			return true;
 		}
 	}
