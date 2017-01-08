@@ -544,18 +544,25 @@ void btree_print(Btree *btree, FILE *stream) {
 }
 
 static void btree_walk_at_node(Btree *btree, BtreePtr node_ptr,
-                               void (*callback)(BtreeKey, BtreeValue)) {
+                               void (*callback)(BtreeKey, BtreeValue, void *),
+                               void *callback_context) {
 	BtreeNode node = btree_read_node(btree, node_ptr);
 
 	for (int i_item = 0; i_item < node.n_items; i_item++) {
-		if (!node.is_leaf)
-			btree_walk_at_node(btree, node.children[i_item], callback);
-		callback(node.items[i_item].key, node.items[i_item].value);
+		if (!node.is_leaf) {
+			btree_walk_at_node(btree, node.children[i_item],
+			                   callback, callback_context);
+		}
+		callback(node.items[i_item].key, node.items[i_item].value,
+		         callback_context);
 	}
-	if (!node.is_leaf)
-		btree_walk_at_node(btree, node.children[node.n_items + 1], callback);
+	if (!node.is_leaf) {
+		btree_walk_at_node(btree, node.children[node.n_items + 1],
+		                   callback, callback_context);
+	}
 }
 
-void btree_walk(Btree *btree, void (*callback)(BtreeKey, BtreeValue)) {
-	btree_walk_at_node(btree, 1, callback);
+void btree_walk(Btree *btree, void (*callback)(BtreeKey, BtreeValue, void *),
+                void *callback_context) {
+	btree_walk_at_node(btree, 1, callback, callback_context);
 }
