@@ -505,9 +505,6 @@ static void btree_set_down_pass(Btree *btree, BtreeItem new_item,
 	cache[node_depth].ptr = node_ptr;
 	cache[node_depth].node = node;
 
-	// TODO extract the common part of this and btree_get_at_node into a
-	// separate function.
-
 	// Index of first key which is >= `key`, or node.n_items if there are none.
 	int i_new_item = 0;
 	while (i_new_item < node.n_items &&
@@ -536,7 +533,8 @@ static void btree_set_down_pass(Btree *btree, BtreeItem new_item,
 
 void btree_set(Btree *btree, BtreeKey key, BtreeValue value) {
 	BtreeItem item = {key, value};
-	BtreeNodeCache cache[128]; // TODO height or height + 1.
+	BtreeNodeCache cache[32]; // Tree height is logarithmic in number of items,
+	                          // so this should always be enough.
 	btree_set_down_pass(btree, item, cache, btree->superblock.root, 0);
 }
 
