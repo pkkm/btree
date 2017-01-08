@@ -425,24 +425,24 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 	// (move some items to a sibling node).
 
 	BtreePtr parent_ptr;
-	int i_child_in_parent;
+	int i_node_in_parent;
 	if (node_ptr == btree->superblock.root) {
 		parent_ptr = BTREE_NULL;
 	} else {
 		parent_ptr = cache[node_depth - 1].ptr;
 		BtreeNode parent = cache[node_depth - 1].node;
 
-		i_child_in_parent = 0;
-		while (i_child_in_parent < BTREE_MAX_CHILDREN &&
-			   parent.children[i_child_in_parent] != node_ptr)
-			i_child_in_parent++;
+		i_node_in_parent = 0;
+		while (i_node_in_parent < BTREE_MAX_CHILDREN &&
+			   parent.children[i_node_in_parent] != node_ptr)
+			i_node_in_parent++;
 		// Defensive programming in case the B-Tree is malformed.
-		xassert(1, i_child_in_parent < BTREE_MAX_CHILDREN);
+		xassert(1, i_node_in_parent < BTREE_MAX_CHILDREN);
 
 		bool compensation_successful = btree_set_try_compensate(
 			btree, node, node_ptr,
 			cache[node_depth - 1].node, cache[node_depth - 1].ptr,
-			new_item, new_right_child, i_in_node, i_child_in_parent);
+			new_item, new_right_child, i_in_node, i_node_in_parent);
 		if (compensation_successful)
 			return;
 	}
@@ -481,7 +481,7 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 
 	if (parent_ptr != BTREE_NULL) {
 		btree_set_up_pass(btree, separator, new_sibling_ptr,
-		                  i_child_in_parent + 1, cache, node_depth - 1);
+		                  i_node_in_parent + 1, cache, node_depth - 1);
 	} else { // We're splitting the root.
 		BtreeNode new_root = btree_new_node();
 		new_root.is_leaf = false;
