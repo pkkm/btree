@@ -153,22 +153,39 @@ static void btree_write_node(Btree *btree, BtreeNode node, BtreePtr ptr) {
 	xassert(2, btree_node_valid(node, ptr == 1));
 
 	char block[BTREE_BLOCK_SIZE];
-	void *pos = block;
+	char *end = block;
 
-	SERIALIZE(pos, node.is_leaf ? 1 : 0, uint8_t);
-	SERIALIZE(pos, node.n_items, uint16_t);
+	SERIALIZE(end, node.is_leaf ? 1 : 0, uint8_t);
+	SERIALIZE(end, node.n_items, uint16_t);
 	for (int i_item = 0; i_item < BTREE_MAX_KEYS; i_item++) {
-		SERIALIZE(pos, node.items[i_item].key, BtreeKey);
-		SERIALIZE(pos, node.items[i_item].value, BtreeKey);
+		SERIALIZE(end, node.items[i_item].key, BtreeKey);
+		SERIALIZE(end, node.items[i_item].value, BtreeKey);
 	}
 	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
-		SERIALIZE(pos, node.children[i_child], BtreePtr);
+		SERIALIZE(end, node.children[i_child], BtreePtr);
 
-	fs_write(btree->file, block, ptr * BTREE_BLOCK_SIZE, sizeof(node));
+	fs_write(btree->file, block, ptr * BTREE_BLOCK_SIZE, end - block);
 }
 
 static void btree_sync(Btree *btree) {
 	btree_write_superblock(btree);
+}
+
+static BtreeNode btree_new_node(void) {
+	BtreeNode node;
+	node.n_items = 0;
+	node.is_leaf = true;
+
+	// For debugging.
+	for (int i_key = 0; i_key < BTREE_MAX_KEYS; i_key++) {
+		node.items[i_key].key = 0xDEADBEEF;
+		node.items[i_key].value = 0xDEADBEEF;
+	}
+
+	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
+		node.children[i_child] = BTREE_NULL;
+
+	return node;
 }
 
 Btree *btree_new(const char *file_name) {
@@ -181,11 +198,7 @@ Btree *btree_new(const char *file_name) {
 	btree->superblock.free_list_head = BTREE_NULL;
 	btree_write_superblock(btree);
 
-	BtreeNode root;
-	root.n_items = 0;
-	root.is_leaf = true;
-	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
-		root.children[i_child] = BTREE_NULL;
+	BtreeNode root = btree_new_node();
 	btree_write_node(btree, root, 1);
 
 	return btree;
@@ -198,7 +211,7 @@ void btree_destroy(Btree *btree) {
 	free(btree);
 }
 
-static BtreePtr btree_alloc_node(Btree *btree) {
+static BtreePtr btree_alloc_block(Btree *btree) {
 	BtreePtr free = btree->superblock.free_list_head;
 	if (free != BTREE_NULL) {
 		// If the free list is non-empty, use its first element.
@@ -214,7 +227,7 @@ static BtreePtr btree_alloc_node(Btree *btree) {
 	}
 }
 
-static void btree_dealloc_node(Btree *btree, BtreePtr ptr) {
+static void btree_dealloc_block(Btree *btree, BtreePtr ptr) {
 	// Only adds to the free list; doesn't shrink the file.
 	BtreeFree new_free;
 	new_free.next_free = btree->superblock.free_list_head;
@@ -410,8 +423,8 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 
 	// Can't compensate. We'll have to split the node (add a right sibling).
 
-	BtreePtr new_sibling_ptr = btree_alloc_node(btree);
-	BtreeNode new_sibling = btree_read_node(btree, new_sibling_ptr);
+	BtreePtr new_sibling_ptr = btree_alloc_block(btree);
+	BtreeNode new_sibling = btree_new_node();
 
 	BtreeItem all_items[BTREE_MAX_KEYS + 1];
 	memcpy(all_items, node.items, BTREE_MAX_KEYS);
