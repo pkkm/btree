@@ -78,11 +78,6 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 			return;
 		}
 
-		if (btree_get(context->btree, key, NULL)) {
-			fprintf(stderr, "ERROR: The key already exists in the tree.\n");
-			return;
-		}
-
 		btree_set(context->btree, key, value);
 	} else if (strcmp(tokens[0], "print") == 0) {
 		btree_print(context->btree, stdout);
