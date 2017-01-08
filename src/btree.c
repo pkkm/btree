@@ -8,8 +8,8 @@
 #include "fs.h"
 #include "utils.h"
 
-// The first block (address 0) of the B-tree's on-disk storage is the superblock
-// (which stores metadata). The next one is the root node.
+// The first block (address 0) of the B-tree's file is the superblock (which
+// stores metadata).
 
 typedef uint64_t BtreePtr;
 #define BTREE_NULL ((BtreePtr) -1)
