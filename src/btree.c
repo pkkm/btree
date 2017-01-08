@@ -373,7 +373,7 @@ static bool btree_set_try_compensate(Btree *btree,
 		}
 	}
 
-	if (i_node_in_parent < BTREE_MAX_CHILDREN - 1) { // Has a right sibling.
+	if (i_node_in_parent < parent.n_items) { // Has a right sibling.
 		BtreePtr right_sibling_ptr = parent.children[i_node_in_parent + 1];
 		BtreeNode right_sibling = btree_read_node(btree, right_sibling_ptr);
 
@@ -481,7 +481,7 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 
 	if (parent_ptr != BTREE_NULL) {
 		btree_set_up_pass(btree, separator, new_sibling_ptr,
-		                  i_node_in_parent + 1, cache, node_depth - 1);
+		                  i_node_in_parent, cache, node_depth - 1);
 	} else { // We're splitting the root.
 		BtreeNode new_root = btree_new_node();
 		new_root.is_leaf = false;
@@ -611,7 +611,7 @@ static void btree_walk_at_node(Btree *btree, BtreePtr node_ptr,
 		         callback_context);
 	}
 	if (!node.is_leaf) {
-		btree_walk_at_node(btree, node.children[node.n_items + 1],
+		btree_walk_at_node(btree, node.children[node.n_items],
 		                   callback, callback_context);
 	}
 }
