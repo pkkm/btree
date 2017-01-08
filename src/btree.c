@@ -575,7 +575,7 @@ static void btree_print_at_node(Btree *btree, FILE *stream,
 
 	BtreeNode node = btree_read_node(btree, node_ptr);
 
-	fprintf(stream, "%*sNode %" BTREE_PTR_PRINT "\n",
+	fprintf(stream, "%*sNode %" BTREE_PTR_PRINT ":\n",
 	        level * INDENT_WIDTH, "", node_ptr);
 
 	for (int i_item = 0; i_item < node.n_items; i_item++) {
@@ -584,7 +584,7 @@ static void btree_print_at_node(Btree *btree, FILE *stream,
 			                    level + 1);
 		}
 		printf("%*s%" BTREE_KEY_PRINT " => %" BTREE_VALUE_PRINT "\n",
-		       level * INDENT_WIDTH, "",
+		       (level + 1) * INDENT_WIDTH, "",
 		       node.items[i_item].key, node.items[i_item].value);
 	}
 	if (!node.is_leaf && node.n_items > 0) {
