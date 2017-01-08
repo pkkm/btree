@@ -586,9 +586,9 @@ static void btree_print_at_node(Btree *btree, FILE *stream,
 		       level * INDENT_WIDTH, "",
 		       node.items[i_item].key, node.items[i_item].value);
 	}
-	if (!node.is_leaf) {
+	if (!node.is_leaf && node.n_items > 0) {
 		btree_print_at_node(btree, stream,
-		                    node.children[node.n_items + 1], level + 1);
+		                    node.children[node.n_items], level + 1);
 	}
 }
 
