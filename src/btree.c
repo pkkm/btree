@@ -352,11 +352,52 @@ static void btree_array_insert(void *array, size_t n_elems_before_insert,
 	memcpy((char *) array + i_new * elem_size, new, elem_size);
 }
 
+static bool btree_set_try_compensate(Btree *btree,
+                                     BtreeNode node, BtreePtr node_ptr,
+                                     BtreeNode parent, BtreePtr parent_ptr,
+                                     BtreeItem new_item,
+                                     BtreePtr new_right_child,
+                                     int i_in_node, int i_node_in_parent) {
+	if (i_node_in_parent > 0) { // Has a left sibling.
+		BtreePtr left_sibling_ptr = parent.children[i_node_in_parent - 1];
+		BtreeNode left_sibling = btree_read_node(btree, left_sibling_ptr);
+
+		if (left_sibling.n_items < BTREE_MAX_KEYS) {
+			btree_compensate(&parent.items[i_node_in_parent - 1],
+			                 &left_sibling, &node,
+			                 new_item, new_right_child, false, i_in_node);
+			btree_write_node(btree, parent, parent_ptr);
+			btree_write_node(btree, left_sibling, left_sibling_ptr);
+			btree_write_node(btree, node, node_ptr);
+			return true;
+		}
+	}
+
+	if (i_node_in_parent < BTREE_MAX_CHILDREN - 1) { // Has a right sibling.
+		BtreePtr right_sibling_ptr = parent.children[i_node_in_parent + 1];
+		BtreeNode right_sibling = btree_read_node(btree, right_sibling_ptr);
+
+		if (right_sibling.n_items < BTREE_MAX_KEYS) {
+			btree_compensate(&parent.items[i_node_in_parent],
+			                 &right_sibling, &node,
+			                 new_item, new_right_child, true, i_in_node);
+			btree_write_node(btree, parent, parent_ptr);
+			btree_write_node(btree, right_sibling, right_sibling_ptr);
+			btree_write_node(btree, node, node_ptr);
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
                               BtreePtr new_right_child, int i_in_node,
                               BtreeNodeCache *cache, int node_depth) {
 	// Insert new_item into the node stored in cache[node_depth] on position
 	// i_in_node. Recurse upwards the tree (using the cache) if necessary.
+
+	xassert(1, node_depth >= 0);
 
 	BtreePtr node_ptr = cache[node_depth].ptr;
 	BtreeNode node = cache[node_depth].node;
@@ -367,6 +408,7 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 	        (!node.is_leaf && new_right_child != BTREE_NULL));
 
 	// If there's free space in the node, just insert the item.
+
 	if (node.n_items < BTREE_MAX_KEYS) {
 		btree_array_insert(node.items, node.n_items, sizeof(node.items[0]),
 						   &new_item, i_in_node);
@@ -378,83 +420,78 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 		return;
 	}
 
-	// The node is full. Try to compensate (move some items to a sibling node).
+	// The node is full. If it's not the root, try to compensate
+	// (move some items to a sibling node).
 
-	// TODO handle the case of being at the root.
-	assert(node_ptr != btree->superblock.root);
+	BtreePtr parent_ptr;
+	int i_child_in_parent;
+	if (node_ptr == btree->superblock.root) {
+		parent_ptr = BTREE_NULL;
+	} else {
+		parent_ptr = cache[node_depth - 1].ptr;
+		BtreeNode parent = cache[node_depth - 1].node;
 
-	BtreePtr parent_ptr = cache[node_depth - 1].ptr;
-	BtreeNode parent = cache[node_depth - 1].node;
+		i_child_in_parent = 0;
+		while (i_child_in_parent < BTREE_MAX_CHILDREN &&
+			   parent.children[i_child_in_parent] != node_ptr)
+			i_child_in_parent++;
+		// Defensive programming in case the B-Tree is malformed.
+		xassert(1, i_child_in_parent < BTREE_MAX_CHILDREN);
 
-	int i_child_in_parent = 0;
-	while (i_child_in_parent < BTREE_MAX_CHILDREN &&
-		   parent.children[i_child_in_parent] != node_ptr)
-		i_child_in_parent++;
-	// Defensive programming in case the B-Tree is malformed.
-	xassert(1, i_child_in_parent < BTREE_MAX_CHILDREN);
-
-	if (i_child_in_parent > 0) { // Has a left sibling.
-		BtreePtr left_sibling_ptr = parent.children[i_child_in_parent - 1];
-		BtreeNode left_sibling = btree_read_node(btree, left_sibling_ptr);
-
-		if (left_sibling.n_items < BTREE_MAX_KEYS) {
-			btree_compensate(&parent.items[i_child_in_parent - 1],
-			                 &left_sibling, &node,
-			                 new_item, new_right_child, false, i_in_node);
-			btree_write_node(btree, parent, parent_ptr);
-			btree_write_node(btree, left_sibling, left_sibling_ptr);
-			btree_write_node(btree, node, node_ptr);
+		bool compensation_successful = btree_set_try_compensate(
+			btree, node, node_ptr,
+			cache[node_depth - 1].node, cache[node_depth - 1].ptr,
+			new_item, new_right_child, i_in_node, i_child_in_parent);
+		if (compensation_successful)
 			return;
-		}
-	}
-
-	if (i_child_in_parent < BTREE_MAX_CHILDREN - 1) { // Has a right sibling.
-		BtreePtr right_sibling_ptr = parent.children[i_child_in_parent + 1];
-		BtreeNode right_sibling = btree_read_node(btree, right_sibling_ptr);
-
-		if (right_sibling.n_items < BTREE_MAX_KEYS) {
-			btree_compensate(&parent.items[i_child_in_parent],
-			                 &right_sibling, &node,
-			                 new_item, new_right_child, true, i_in_node);
-			btree_write_node(btree, parent, parent_ptr);
-			btree_write_node(btree, right_sibling, right_sibling_ptr);
-			btree_write_node(btree, node, node_ptr);
-			return;
-		}
 	}
 
 	// Can't compensate. We'll have to split the node (add a right sibling).
 
-	BtreePtr new_sibling_ptr = btree_alloc_block(btree);
 	BtreeNode new_sibling = btree_new_node();
 
 	BtreeItem all_items[BTREE_MAX_KEYS + 1];
-	memcpy(all_items, node.items, BTREE_MAX_KEYS);
+	memcpy(all_items, node.items, BTREE_MAX_KEYS * sizeof(all_items[0]));
 	btree_array_insert(all_items, BTREE_MAX_KEYS, sizeof(all_items[0]),
 	                   &new_item, i_in_node);
 
 	node.n_items = BTREE_MIN_KEYS;
-	memcpy(node.items, all_items, node.n_items);
+	memcpy(node.items, all_items, node.n_items * sizeof(node.items[0]));
 	BtreeItem separator = all_items[node.n_items];
 	new_sibling.n_items = ARRAY_LEN(all_items) - node.n_items - 1;
 	memcpy(new_sibling.items, all_items + node.n_items + 1,
-	       new_sibling.n_items);
+	       new_sibling.n_items * sizeof(new_sibling.items[0]));
 
 	BtreePtr all_children[BTREE_MAX_CHILDREN + 1];
-	memcpy(all_children, node.children, BTREE_MAX_KEYS);
+	memcpy(all_children, node.children,
+	       BTREE_MAX_CHILDREN * sizeof(all_children[0]));
 	btree_array_insert(all_children, BTREE_MAX_CHILDREN,
 	                   sizeof(all_children[0]),
 	                   &new_right_child, i_in_node + 1);
 
-	memcpy(node.children, all_children, node.n_items + 1);
+	memcpy(node.children, all_children,
+	       (node.n_items + 1) * sizeof(node.children[0]));
 	memcpy(new_sibling.children, all_children + node.n_items + 1,
-	       new_sibling.n_items + 1);
+	       (new_sibling.n_items + 1) * sizeof(new_sibling.children[0]));
 
 	btree_write_node(btree, node, node_ptr);
+	BtreePtr new_sibling_ptr = btree_alloc_block(btree);
 	btree_write_node(btree, new_sibling, new_sibling_ptr);
 
-	btree_set_up_pass(btree, separator, new_sibling_ptr, i_child_in_parent + 1,
-	                  cache, node_depth - 1);
+	if (parent_ptr != BTREE_NULL) {
+		btree_set_up_pass(btree, separator, new_sibling_ptr,
+		                  i_child_in_parent + 1, cache, node_depth - 1);
+	} else { // We're splitting the root.
+		BtreeNode new_root = btree_new_node();
+		new_root.is_leaf = false;
+		new_root.n_items = 1;
+		new_root.items[0] = separator;
+		new_root.children[0] = node_ptr;
+		new_root.children[1] = new_sibling_ptr;
+
+		btree->superblock.root = btree_alloc_block(btree);
+		btree_write_node(btree, new_root, btree->superblock.root);
+	}
 }
 
 static void btree_set_down_pass(Btree *btree, BtreeItem new_item,
