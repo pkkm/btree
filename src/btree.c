@@ -499,7 +499,8 @@ static bool btree_get_at_node(Btree *btree, BtreePtr node_ptr,
 	if (i_item < node.n_items &&
 	    btree_key_cmp(node.items[i_item].key, key) == 0) {
 		// We found the key.
-		*value = node.items[i_item].value;
+		if (value != NULL)
+			*value = node.items[i_item].value;
 		return true;
 	} else if (!node.is_leaf) {
 		// We know that keys[i_item - 1] < item.key < keys[i_item], so the key
