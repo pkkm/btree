@@ -44,6 +44,7 @@ enum {
 };
 
 typedef struct {
+	BtreePtr root;
 	BtreePtr free_list_head;
 	BtreePtr end; // The block after the last used one.
 } BtreeSuperblock;
@@ -139,7 +140,7 @@ static BtreeNode btree_read_node(Btree *btree, BtreePtr ptr) {
 	for (int i_child = 0; i_child < BTREE_MAX_CHILDREN; i_child++)
 		DESERIALIZE(pos, node.children[i_child], BtreePtr);
 
-	xassert(2, btree_node_valid(node, ptr == 1));
+	xassert(2, btree_node_valid(node, ptr == btree->superblock.root));
 	return node;
 }
 
@@ -150,7 +151,7 @@ static BtreeNode btree_read_node(Btree *btree, BtreePtr ptr) {
 	} while (false)
 
 static void btree_write_node(Btree *btree, BtreeNode node, BtreePtr ptr) {
-	xassert(2, btree_node_valid(node, ptr == 1));
+	xassert(2, btree_node_valid(node, ptr == btree->superblock.root));
 
 	char block[BTREE_BLOCK_SIZE];
 	char *end = block;
@@ -194,12 +195,13 @@ Btree *btree_new(const char *file_name) {
 	btree->file = fs_open(file_name, true);
 	fs_set_size(btree->file, BTREE_BLOCK_SIZE * 2);
 
+	btree->superblock.root = 1;
 	btree->superblock.end = 2;
 	btree->superblock.free_list_head = BTREE_NULL;
 	btree_write_superblock(btree);
 
 	BtreeNode root = btree_new_node();
-	btree_write_node(btree, root, 1);
+	btree_write_node(btree, root, btree->superblock.root);
 
 	return btree;
 }
@@ -359,8 +361,8 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 	BtreePtr node_ptr = cache[node_depth].ptr;
 	BtreeNode node = cache[node_depth].node;
 
-	xassert(1, (node_ptr == 1 && node_depth == 0) ||
-	        (node_ptr != 1 && node_depth > 0));
+	xassert(1, (node_ptr == btree->superblock.root && node_depth == 0) ||
+	        (node_ptr != btree->superblock.root && node_depth > 0));
 	xassert(1, (node.is_leaf && new_right_child == BTREE_NULL) ||
 	        (!node.is_leaf && new_right_child != BTREE_NULL));
 
@@ -379,7 +381,7 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 	// The node is full. Try to compensate (move some items to a sibling node).
 
 	// TODO handle the case of being at the root.
-	assert(node_ptr != 1);
+	assert(node_ptr != btree->superblock.root);
 
 	BtreePtr parent_ptr = cache[node_depth - 1].ptr;
 	BtreeNode parent = cache[node_depth - 1].node;
@@ -497,7 +499,7 @@ static void btree_set_down_pass(Btree *btree, BtreeItem new_item,
 void btree_set(Btree *btree, BtreeKey key, BtreeValue value) {
 	BtreeItem item = {key, value};
 	BtreeNodeCache cache[128]; // TODO height or height + 1.
-	btree_set_down_pass(btree, item, cache, 1, 0);
+	btree_set_down_pass(btree, item, cache, btree->superblock.root, 0);
 }
 
 static bool btree_get_at_node(Btree *btree, BtreePtr node_ptr,
@@ -526,7 +528,7 @@ static bool btree_get_at_node(Btree *btree, BtreePtr node_ptr,
 }
 
 bool btree_get(Btree *btree, BtreeKey key, BtreeValue *value) {
-	return btree_get_at_node(btree, 1, key, value);
+	return btree_get_at_node(btree, btree->superblock.root, key, value);
 }
 
 static void btree_print_at_node(Btree *btree, FILE *stream,
@@ -554,7 +556,7 @@ static void btree_print_at_node(Btree *btree, FILE *stream,
 }
 
 void btree_print(Btree *btree, FILE *stream) {
-	btree_print_at_node(btree, stream, 1, 0);
+	btree_print_at_node(btree, stream, btree->superblock.root, 0);
 }
 
 static void btree_walk_at_node(Btree *btree, BtreePtr node_ptr,
@@ -578,5 +580,6 @@ static void btree_walk_at_node(Btree *btree, BtreePtr node_ptr,
 
 void btree_walk(Btree *btree, void (*callback)(BtreeKey, BtreeValue, void *),
                 void *callback_context) {
-	btree_walk_at_node(btree, 1, callback, callback_context);
+	btree_walk_at_node(btree, btree->superblock.root,
+	                   callback, callback_context);
 }
