@@ -32,6 +32,8 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 	     token = strtok_r(NULL, DELIMITERS, &strtok_context))
 		tokens[n_tokens++] = token;
 
+	FsStats old_stats = btree_fs_stats(context->btree);
+
 	if (n_tokens == 0)
 		return;
 
@@ -88,7 +90,13 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 		btree_walk(context->btree, &list_btree_callback, NULL);
 	} else {
 		fprintf(stderr, "ERROR: Unknown command: %s\n", tokens[0]);
+		return;
 	}
+
+	FsStats new_stats = btree_fs_stats(context->btree);
+	printf("Reads: %" PRIu64 ", writes: %" PRIu64 "\n",
+	       new_stats.n_reads - old_stats.n_reads,
+	       new_stats.n_writes - old_stats.n_writes);
 }
 
 int main(int argc, char **argv) {

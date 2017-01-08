@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include "fs.h"
 
 typedef uint32_t BtreeKey;
 typedef uint64_t BtreeValue;
@@ -19,3 +20,5 @@ void btree_set(Btree *btree, BtreeKey key, BtreeValue value);
 void btree_print(Btree *btree, FILE *stream);
 void btree_walk(Btree *btree, void (*callback)(BtreeKey, BtreeValue, void *),
                 void *callback_context);
+
+FsStats btree_fs_stats(Btree *btree);

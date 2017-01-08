@@ -4,7 +4,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 
-#include "fs.h"
+#include "fs.c"
 #include <stdlib.h>
 #include <string.h>
 #include "utils.h"
@@ -22,8 +22,8 @@ static int shutdown() {
 }
 
 static void test_initial_stats() {
-	assert_int_equal(file->n_reads, 0);
-	assert_int_equal(file->n_writes, 0);
+	assert_int_equal(file->stats.n_reads, 0);
+	assert_int_equal(file->stats.n_writes, 0);
 }
 
 static const int FILE_SIZE = 2500;
@@ -45,8 +45,8 @@ static void test_read_write() {
 }
 
 static void test_final_stats() {
-	assert_int_equal(file->n_reads, 2);
-	assert_int_equal(file->n_writes, 1);
+	assert_int_equal(file->stats.n_reads, 2);
+	assert_int_equal(file->stats.n_writes, 1);
 }
 
 int main(void) {

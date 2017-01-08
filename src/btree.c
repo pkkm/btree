@@ -619,3 +619,7 @@ void btree_walk(Btree *btree, void (*callback)(BtreeKey, BtreeValue, void *),
 	btree_walk_at_node(btree, btree->superblock.root,
 	                   callback, callback_context);
 }
+
+FsStats btree_fs_stats(Btree *btree) {
+	return fs_stats(btree->file);
+}
