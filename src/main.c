@@ -2,13 +2,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <inttypes.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "btree.h"
+#include "fs.h"
+#include "recf.h"
 #include "utils.h"
 
 typedef struct {
 	Btree *btree;
+	Recf *recf;
 } Context;
 
 void print_key_value(BtreeKey key, BtreeValue value) {
@@ -32,14 +36,15 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 	     token = strtok_r(NULL, DELIMITERS, &strtok_context))
 		tokens[n_tokens++] = token;
 
-	FsStats old_stats = btree_fs_stats(context->btree);
+	FsStats old_btree_stats = btree_fs_stats(context->btree);
+	FsStats old_recf_stats = recf_fs_stats(context->recf);
 
 	if (n_tokens == 0)
 		return;
 
 	if (strcmp(tokens[0], "get") == 0) {
 		if (n_tokens != 2) {
-			fprintf(stderr, "ERROR: Invalid syntax. Use: get-raw <key>\n");
+			fprintf(stderr, "ERROR: Invalid syntax. Use: get <key>\n");
 			return;
 		}
 
@@ -57,7 +62,7 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 			fprintf(stderr, "ERROR: The key %" BTREE_KEY_PRINT
 			        " doesn't exist in the tree.\n", key);
 		}
-	} else if (strcmp(tokens[0], "insert") == 0) {
+	} else if (strcmp(tokens[0], "insert-raw") == 0) { // TODO add record insertion.
 		if (n_tokens != 3) {
 			fprintf(stderr, "ERROR: Invalid syntax. "
 			        "Use: insert-raw <key> <value>\n");
@@ -79,9 +84,12 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 		}
 
 		btree_set(context->btree, key, value);
-	} else if (strcmp(tokens[0], "print") == 0) {
+	} else if (strcmp(tokens[0], "print-tree") == 0) {
 		btree_print(context->btree, stdout);
+	} else if (strcmp(tokens[0], "print-record-file") == 0) {
+		recf_print(context->recf, stdout);
 	} else if (strcmp(tokens[0], "list") == 0) {
+		// TODO retrieve records from record file.
 		btree_walk(context->btree, &list_btree_callback, NULL);
 	} else if (strcmp(tokens[0], "delete") == 0) {
 		fprintf(stderr, "ERROR: Not implemented.\n");
@@ -91,17 +99,22 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 		return;
 	}
 
-	FsStats new_stats = btree_fs_stats(context->btree);
-	printf("Reads: %" PRIu64 ", writes: %" PRIu64 "\n",
-	       new_stats.n_reads - old_stats.n_reads,
-	       new_stats.n_writes - old_stats.n_writes);
+	FsStats new_btree_stats = btree_fs_stats(context->btree);
+	FsStats new_recf_stats = recf_fs_stats(context->recf);
+	printf("Tree reads: %" PRIu64 ", writes: %" PRIu64 "; record file reads: %"
+	       PRIu64 ", writes: %" PRIu64 "\n",
+	       new_btree_stats.n_reads - old_btree_stats.n_reads,
+	       new_btree_stats.n_writes - old_btree_stats.n_writes,
+	       new_recf_stats.n_reads - old_recf_stats.n_reads,
+	       new_recf_stats.n_writes - old_recf_stats.n_writes);
 }
 
 int main(int argc, char **argv) {
 	srand(time(NULL));
 
-	Context context = {NULL};
+	Context context;
 	context.btree = btree_new("btree.dat");
+	context.recf = recf_new("recf.dat");
 
 	bool interactive = (argc == 1);
 	if (interactive) {
@@ -135,6 +148,7 @@ int main(int argc, char **argv) {
 		free(line_buffer);
 	}
 
+	recf_destroy(context.recf);
 	btree_destroy(context.btree);
 	return 0;
 }
