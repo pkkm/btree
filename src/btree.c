@@ -529,7 +529,7 @@ static void btree_print_at_node(Btree *btree, FILE *stream,
 			btree_print_at_node(btree, stream, node.children[i_item],
 			                    level + 1);
 		}
-		printf("%*sKey %" BTREE_KEY_PRINT ", value %" BTREE_VALUE_PRINT "\n",
+		printf("%*s%" BTREE_KEY_PRINT " => %" BTREE_VALUE_PRINT "\n",
 		       level * INDENT_WIDTH, "",
 		       node.items[i_item].key, node.items[i_item].value);
 	}
