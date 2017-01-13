@@ -51,7 +51,7 @@ void fs_read(FsFile *file, void *dest, FsOffset offset, size_t n_bytes) {
 	file->stats.n_reads++;
 
 	ssize_t pread_result = pread(fileno(file->file), dest, n_bytes, offset);
-	xassert(1, pread_result == n_bytes);
+	xassert(1, (size_t) pread_result == n_bytes);
 }
 
 void fs_write(FsFile *file, const void *src, FsOffset offset, size_t n_bytes) {
@@ -61,7 +61,7 @@ void fs_write(FsFile *file, const void *src, FsOffset offset, size_t n_bytes) {
 	file->stats.n_writes++;
 
 	ssize_t pwrite_result = pwrite(fileno(file->file), src, n_bytes, offset);
-	xassert(1, pwrite_result == n_bytes);
+	xassert(1, (size_t) pwrite_result == n_bytes);
 }
 
 FsStats fs_stats(FsFile *file) {
