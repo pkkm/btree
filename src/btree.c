@@ -8,15 +8,7 @@
 #include "fs.h"
 #include "utils.h"
 
-// The first block (address 0) of the B-tree's file is the superblock (which
-// stores metadata).
-
-typedef uint64_t BtreePtr;
-#define BTREE_NULL ((BtreePtr) -1)
-#define BTREE_PTR_PRINT PRIu64
-// A "pointer" to a B-tree node is just the block index.
-
-static int btree_key_cmp(BtreeKey a, BtreeKey b) {
+int btree_key_cmp(BtreeKey a, BtreeKey b) {
 	// Ascending order, i.e. the return value will be:
 	//   < 0  if a < b,
 	//   == 0 if a == b,
@@ -24,9 +16,12 @@ static int btree_key_cmp(BtreeKey a, BtreeKey b) {
 	return (a > b) - (a < b);
 }
 
-enum {
-	BTREE_BLOCK_SIZE = 512,
+typedef uint64_t BtreePtr;
+#define BTREE_NULL ((BtreePtr) -1)
+#define BTREE_PTR_PRINT PRIu64
+// A "pointer" to a B-tree node is just the block index.
 
+enum {
 	BTREE_MAX_POSSIBLE_KEYS =
 		(BTREE_BLOCK_SIZE
 		 - sizeof(uint8_t) - sizeof(uint16_t) - sizeof(BtreePtr))
@@ -43,6 +38,8 @@ enum {
 	BTREE_MAX_CHILDREN = BTREE_MAX_KEYS + 1
 };
 
+// The first block (address 0) of the B-tree's file is the superblock (which
+// stores metadata).
 typedef struct {
 	BtreePtr root;
 	BtreePtr free_list_head;

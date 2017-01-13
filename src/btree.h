@@ -4,10 +4,13 @@
 #include <stdio.h>
 #include "fs.h"
 
+// Settings.
+enum { BTREE_BLOCK_SIZE = 512 };
 typedef uint32_t BtreeKey;
 typedef uint64_t BtreeValue;
 #define BTREE_KEY_PRINT PRIu32
 #define BTREE_VALUE_PRINT PRIu64
+int btree_key_cmp(BtreeKey a, BtreeKey b);
 
 typedef struct Btree Btree;
 
