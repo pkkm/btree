@@ -39,7 +39,7 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 
 	if (strcmp(tokens[0], "get") == 0) {
 		if (n_tokens != 2) {
-			fprintf(stderr, "ERROR: invalid syntax. Use: get-raw <key>\n");
+			fprintf(stderr, "ERROR: Invalid syntax. Use: get-raw <key>\n");
 			return;
 		}
 
@@ -59,7 +59,7 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 		}
 	} else if (strcmp(tokens[0], "insert") == 0) {
 		if (n_tokens != 3) {
-			fprintf(stderr, "ERROR: invalid syntax. "
+			fprintf(stderr, "ERROR: Invalid syntax. "
 			        "Use: insert-raw <key> <value>\n");
 			return;
 		}
@@ -83,6 +83,9 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 		btree_print(context->btree, stdout);
 	} else if (strcmp(tokens[0], "list") == 0) {
 		btree_walk(context->btree, &list_btree_callback, NULL);
+	} else if (strcmp(tokens[0], "delete") == 0) {
+		fprintf(stderr, "ERROR: Not implemented.\n");
+		return;
 	} else {
 		fprintf(stderr, "ERROR: Unknown command: %s\n", tokens[0]);
 		return;
