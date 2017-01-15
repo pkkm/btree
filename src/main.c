@@ -15,13 +15,13 @@ typedef struct {
 	Recf *recf;
 } Context;
 
-void print_key_value(BtreeKey key, BtreeValue value) {
-	printf("%" BTREE_KEY_PRINT " => %" BTREE_VALUE_PRINT "\n", key, value);
+void print_key_value_record(BtreeKey key, BtreeValue value, Context *context) {
+	printf("%" BTREE_KEY_PRINT " => %" BTREE_VALUE_PRINT " ==> %"
+	       RECF_RECORD_PRINT "\n", key, value, recf_get(context->recf, value));
 }
 
-
 void list_btree_callback(BtreeKey key, BtreeValue value, void *context) {
-	print_key_value(key, value);
+	print_key_value_record(key, value, (Context *) context);
 }
 
 void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
@@ -57,15 +57,15 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 
 		BtreeValue value;
 		if (btree_get(context->btree, key, &value)) {
-			print_key_value(key, value);
+			print_key_value_record(key, value, context);
 		} else {
 			fprintf(stderr, "ERROR: The key %" BTREE_KEY_PRINT
 			        " doesn't exist in the tree.\n", key);
 		}
-	} else if (strcmp(tokens[0], "insert-raw") == 0) { // TODO add record insertion.
+	} else if (strcmp(tokens[0], "insert") == 0) {
 		if (n_tokens != 3) {
 			fprintf(stderr, "ERROR: Invalid syntax. "
-			        "Use: insert-raw <key> <value>\n");
+			        "Use: insert <key> <record>\n");
 			return;
 		}
 
@@ -76,21 +76,21 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 			return;
 		}
 
-		char *remaining_value;
-		BtreeValue value = strtoll(tokens[2], &remaining_value, 10);
-		if (remaining_value[0] != '\0') {
-			fprintf(stderr, "ERROR: The value must be a positive integer.\n");
+		char *remaining_record;
+		RecfRecord record = strtoll(tokens[2], &remaining_record, 10);
+		if (remaining_record[0] != '\0') {
+			fprintf(stderr, "ERROR: The record must be a positive integer.\n");
 			return;
 		}
 
-		btree_set(context->btree, key, value);
+		RecfIdx idx = recf_add(context->recf, record);
+		btree_set(context->btree, key, idx);
 	} else if (strcmp(tokens[0], "print-tree") == 0) {
 		btree_print(context->btree, stdout);
 	} else if (strcmp(tokens[0], "print-record-file") == 0) {
 		recf_print(context->recf, stdout);
 	} else if (strcmp(tokens[0], "list") == 0) {
-		// TODO retrieve records from record file.
-		btree_walk(context->btree, &list_btree_callback, NULL);
+		btree_walk(context->btree, &list_btree_callback, context);
 	} else if (strcmp(tokens[0], "delete") == 0) {
 		fprintf(stderr, "ERROR: Not implemented.\n");
 		return;
