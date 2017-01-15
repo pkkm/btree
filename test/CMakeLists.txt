@@ -11,6 +11,7 @@ function(add_test_dwim name)
 endfunction(add_test_dwim)
 
 add_test_dwim(test_fs src_fs)
+add_test_dwim(test_btree src_btree)
 
 foreach(name ${tests_to_add})
   add_test("${name}" "./${name}")
