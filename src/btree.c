@@ -493,8 +493,8 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 }
 
 static void btree_set_down_pass(Btree *btree, BtreeItem new_item,
-                                   BtreeNodeCache *cache, BtreePtr node_ptr,
-                                   int node_depth) {
+								BtreeNodeCache *cache, BtreePtr node_ptr,
+								int node_depth) {
 	// Recurse down the tree to find the appropriate node for new_item and
 	// insert the item there. Fill the cache while doing this.
 
