@@ -292,22 +292,24 @@ static void btree_compensate(BtreeItem *separator_in_parent,
 	BtreePtr all_children[BTREE_MAX_CHILDREN * 2 + 1];
 	int n_all_children = 0;
 
-	for (int i = 0; i < left->n_items + 1; i++) {
+	if (!left->is_leaf) {
+		for (int i = 0; i < left->n_items + 1; i++) {
+			if (n_all_children == i_new_child_in_all)
+				all_children[n_all_children++] = new_right_child;
+			all_children[n_all_children++] = left->children[i];
+		}
+
+		for (int i = 0; i < right->n_items + 1; i++) {
+			if (n_all_children == i_new_child_in_all)
+				all_children[n_all_children++] = new_right_child;
+			all_children[n_all_children++] = right->children[i];
+		}
+
 		if (n_all_children == i_new_child_in_all)
 			all_children[n_all_children++] = new_right_child;
-		all_children[n_all_children++] = left->children[i];
 	}
 
-	for (int i = 0; i < right->n_items + 1; i++) {
-		if (n_all_children == i_new_child_in_all)
-			all_children[n_all_children++] = new_right_child;
-		all_children[n_all_children++] = right->children[i];
-	}
-
-	if (n_all_children == i_new_child_in_all)
-		all_children[n_all_children++] = new_right_child;
-
-	// Divide the items among the left node, the place for an item in the
+	// Distribute the items among the left node, the place for an item in the
 	// parent, and the right node.
 
 	left->n_items = (n_all_items - 1) / 2;
@@ -321,14 +323,16 @@ static void btree_compensate(BtreeItem *separator_in_parent,
 		right->items[i] = all_items[i_next_key++];
 	xassert(1, i_next_key == n_all_items);
 
-	// Divide the children between the nodes.
+	// Distribute the children between the nodes.
 
-	int i_next_child = 0;
-	for (int i = 0; i < left->n_items + 1; i++)
-		left->children[i] = all_children[i_next_child++];
-	for (int i = 0; i < right->n_items + 1; i++)
-		right->children[i] = all_children[i_next_child++];
-	xassert(1, i_next_child == n_all_children);
+	if (!left->is_leaf) {
+		int i_next_child = 0;
+		for (int i = 0; i < left->n_items + 1; i++)
+			left->children[i] = all_children[i_next_child++];
+		for (int i = 0; i < right->n_items + 1; i++)
+			right->children[i] = all_children[i_next_child++];
+		xassert(1, i_next_child == n_all_children);
+	}
 
 	// Check node validity.
 	xassert(2, btree_node_valid(*left, false) &&
@@ -449,11 +453,13 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 	BtreeNode new_sibling = btree_new_node();
 	new_sibling.is_leaf = node.is_leaf;
 
+	// Collect items in the node to split and the new item into an array.
 	BtreeItem all_items[BTREE_MAX_KEYS + 1];
 	memcpy(all_items, node.items, BTREE_MAX_KEYS * sizeof(all_items[0]));
 	btree_array_insert(all_items, BTREE_MAX_KEYS, sizeof(all_items[0]),
 	                   &new_item, i_in_node);
 
+	// Distribute the items between the two nodes and the item separating them.
 	node.n_items = BTREE_MIN_KEYS;
 	memcpy(node.items, all_items, node.n_items * sizeof(node.items[0]));
 	BtreeItem separator = all_items[node.n_items];
@@ -461,17 +467,23 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 	memcpy(new_sibling.items, all_items + node.n_items + 1,
 	       new_sibling.n_items * sizeof(new_sibling.items[0]));
 
-	BtreePtr all_children[BTREE_MAX_CHILDREN + 1];
-	memcpy(all_children, node.children,
-	       BTREE_MAX_CHILDREN * sizeof(all_children[0]));
-	btree_array_insert(all_children, BTREE_MAX_CHILDREN,
-	                   sizeof(all_children[0]),
-	                   &new_right_child, i_in_node + 1);
+	new_sibling.is_leaf = node.is_leaf;
+	if (!node.is_leaf) {
+		// Collect children of the node to split and the new child into an
+		// array.
+		BtreePtr all_children[BTREE_MAX_CHILDREN + 1];
+		memcpy(all_children, node.children,
+			   BTREE_MAX_CHILDREN * sizeof(all_children[0]));
+		btree_array_insert(all_children, BTREE_MAX_CHILDREN,
+						   sizeof(all_children[0]),
+						   &new_right_child, i_in_node + 1);
 
-	memcpy(node.children, all_children,
-	       (node.n_items + 1) * sizeof(node.children[0]));
-	memcpy(new_sibling.children, all_children + node.n_items + 1,
-	       (new_sibling.n_items + 1) * sizeof(new_sibling.children[0]));
+		// Distribute the children between the two nodes.
+		memcpy(node.children, all_children,
+			   (node.n_items + 1) * sizeof(node.children[0]));
+		memcpy(new_sibling.children, all_children + node.n_items + 1,
+			   (new_sibling.n_items + 1) * sizeof(new_sibling.children[0]));
+	}
 
 	btree_write_node(btree, node, node_ptr);
 	BtreePtr new_sibling_ptr = btree_alloc_block(btree);
