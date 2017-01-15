@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <string.h>
 #include "xassert.h"
 #include "fs.h"
 #include "utils.h"
@@ -43,32 +44,77 @@ struct Recf { // Typedef'd in the header file.
 	RecfSuperblock superblock; // Cache.
 };
 
+static struct {
+	bool dirty;
+	RecfBlock block;
+	char data[RECF_BLOCK_SIZE];
+} recf_cache = {false, RECF_NULL, {0}};
+
+void recf_cache_flush(FsFile *file) {
+	if (!recf_cache.dirty)
+		return;
+	recf_cache.dirty = false;
+	fs_write(file, recf_cache.data,
+	         recf_cache.block * RECF_BLOCK_SIZE, RECF_BLOCK_SIZE);
+}
+
+void recf_cache_block(FsFile *file, RecfBlock block) {
+	if (block == recf_cache.block)
+		return;
+
+	if (block != RECF_NULL)
+		recf_cache_flush(file);
+
+	fs_read(file, recf_cache.data, block * RECF_BLOCK_SIZE, RECF_BLOCK_SIZE);
+	recf_cache.block = block;
+}
+
+void recf_read(FsFile *file, void *dest, FsOffset offset, size_t n_bytes) {
+	RecfBlock block = offset / RECF_BLOCK_SIZE;
+	recf_cache_block(file, block);
+
+	int offset_in_block = offset - block * RECF_BLOCK_SIZE;
+	memcpy(dest, recf_cache.data + offset_in_block, n_bytes);
+}
+
+void recf_write(FsFile *file, const void *src,
+                FsOffset offset, size_t n_bytes) {
+	RecfBlock block = offset / RECF_BLOCK_SIZE;
+	recf_cache_block(file, block);
+
+	int offset_in_block = offset - block * RECF_BLOCK_SIZE;
+	memcpy(recf_cache.data + offset_in_block, src, n_bytes);
+	recf_cache.dirty = true;
+}
+
 static void recf_read_superblock(Recf *recf) {
-	fs_read(recf->file, &recf->superblock, 0, sizeof(recf->superblock));
+	recf_read(recf->file, &recf->superblock, 0, sizeof(recf->superblock));
 }
 
 static void recf_write_superblock(Recf *recf) {
-	fs_write(recf->file, &recf->superblock, 0, sizeof(recf->superblock));
+	recf_write(recf->file, &recf->superblock, 0, sizeof(recf->superblock));
 }
 
 static RecfFree recf_read_free(Recf *recf, RecfIdx idx) {
 	RecfFree free;
-	fs_read(recf->file, &free, recf_idx_to_disk_offset(idx), sizeof(free));
+	recf_read(recf->file, &free, recf_idx_to_disk_offset(idx), sizeof(free));
 	return free;
 }
 
 static void recf_write_free(Recf *recf, RecfFree free, RecfIdx idx) {
-	fs_write(recf->file, &free, recf_idx_to_disk_offset(idx), sizeof(free));
+	recf_write(recf->file, &free, recf_idx_to_disk_offset(idx), sizeof(free));
 }
 
 static RecfRecord recf_read_record(Recf *recf, RecfIdx idx) {
 	RecfRecord record;
-	fs_read(recf->file, &record, recf_idx_to_disk_offset(idx), sizeof(record));
+	recf_read(recf->file, &record,
+	          recf_idx_to_disk_offset(idx), sizeof(record));
 	return record;
 }
 
 static void recf_write_record(Recf *recf, RecfRecord record, RecfIdx idx) {
-	fs_write(recf->file, &record, recf_idx_to_disk_offset(idx), sizeof(record));
+	recf_write(recf->file, &record,
+	           recf_idx_to_disk_offset(idx), sizeof(record));
 }
 
 static void recf_sync(Recf *recf) {
