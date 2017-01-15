@@ -42,14 +42,17 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 	if (n_tokens == 0)
 		return;
 
-	if (strcmp(tokens[0], "get") == 0) {
+	char *operation = tokens[0];
+	char **args = &tokens[1];
+
+	if (strcmp(operation, "get") == 0) {
 		if (n_tokens != 2) {
 			fprintf(stderr, "ERROR: Invalid syntax. Use: get <key>\n");
 			return;
 		}
 
 		char *remaining_key;
-		BtreeKey key = strtoll(tokens[1], &remaining_key, 10);
+		BtreeKey key = strtoll(args[0], &remaining_key, 10);
 		if (remaining_key[0] != '\0') {
 			fprintf(stderr, "ERROR: The key must be a positive integer.\n");
 			return;
@@ -62,7 +65,7 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 			fprintf(stderr, "ERROR: The key %" BTREE_KEY_PRINT
 			        " doesn't exist in the tree.\n", key);
 		}
-	} else if (strcmp(tokens[0], "insert") == 0) {
+	} else if (strcmp(operation, "insert") == 0) {
 		if (n_tokens != 3) {
 			fprintf(stderr, "ERROR: Invalid syntax. "
 			        "Use: insert <key> <record>\n");
@@ -70,14 +73,14 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 		}
 
 		char *remaining_key;
-		BtreeKey key = strtoll(tokens[1], &remaining_key, 10);
+		BtreeKey key = strtoll(args[0], &remaining_key, 10);
 		if (remaining_key[0] != '\0') {
 			fprintf(stderr, "ERROR: The key must be a positive integer.\n");
 			return;
 		}
 
 		char *remaining_record;
-		RecfRecord record = strtoll(tokens[2], &remaining_record, 10);
+		RecfRecord record = strtoll(args[1], &remaining_record, 10);
 		if (remaining_record[0] != '\0') {
 			fprintf(stderr, "ERROR: The record must be a positive integer.\n");
 			return;
@@ -85,17 +88,17 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 
 		RecfIdx idx = recf_add(context->recf, record);
 		btree_set(context->btree, key, idx);
-	} else if (strcmp(tokens[0], "print-tree") == 0) {
+	} else if (strcmp(operation, "print-tree") == 0) {
 		btree_print(context->btree, stdout);
-	} else if (strcmp(tokens[0], "print-record-file") == 0) {
+	} else if (strcmp(operation, "print-record-file") == 0) {
 		recf_print(context->recf, stdout);
-	} else if (strcmp(tokens[0], "list") == 0) {
+	} else if (strcmp(operation, "list") == 0) {
 		btree_walk(context->btree, &list_btree_callback, context);
-	} else if (strcmp(tokens[0], "delete") == 0) {
+	} else if (strcmp(operation, "delete") == 0) {
 		fprintf(stderr, "ERROR: Not implemented.\n");
 		return;
 	} else {
-		fprintf(stderr, "ERROR: Unknown command: %s\n", tokens[0]);
+		fprintf(stderr, "ERROR: Unknown command: %s\n", operation);
 		return;
 	}
 
