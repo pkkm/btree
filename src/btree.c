@@ -43,7 +43,7 @@ enum {
 typedef struct {
 	BtreePtr root;
 	BtreePtr free_list_head;
-	BtreePtr end; // The block after the last used one.
+	BtreePtr end; // Number of used blocks.
 } BtreeSuperblock;
 
 typedef struct {
