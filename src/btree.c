@@ -447,6 +447,7 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 	// Can't compensate. We'll have to split the node (add a right sibling).
 
 	BtreeNode new_sibling = btree_new_node();
+	new_sibling.is_leaf = node.is_leaf;
 
 	BtreeItem all_items[BTREE_MAX_KEYS + 1];
 	memcpy(all_items, node.items, BTREE_MAX_KEYS * sizeof(all_items[0]));
