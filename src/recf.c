@@ -81,7 +81,7 @@ Recf *recf_new(const char *file_name) {
 	recf->file = fs_open(file_name, true);
 	fs_set_size(recf->file, RECF_BLOCK_SIZE);
 
-	recf->superblock.end = 1;
+	recf->superblock.end = 0;
 	recf->superblock.free_list_head = RECF_NULL;
 	recf_write_superblock(recf);
 
@@ -106,10 +106,11 @@ static RecfIdx recf_alloc_record(Recf *recf) {
 		RecfIdx old_end = recf->superblock.end;
 		recf->superblock.end++;
 
-		if (recf_idx_to_block(recf->superblock.end) !=
-			recf_idx_to_block(old_end)) {
+		if (old_end == 0 ||
+			recf_idx_to_block(recf->superblock.end - 1) >
+			recf_idx_to_block(old_end - 1)) {
 			fs_set_size(recf->file, RECF_BLOCK_SIZE *
-			            recf_idx_to_block(recf->superblock.end));
+						(recf_idx_to_block(recf->superblock.end - 1) + 1));
 		}
 
 		return old_end;
