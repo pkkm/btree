@@ -65,10 +65,10 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 			fprintf(stderr, "ERROR: The key %" BTREE_KEY_PRINT
 			        " doesn't exist in the tree.\n", key);
 		}
-	} else if (strcmp(operation, "insert") == 0) {
+	} else if (strcmp(operation, "set") == 0) {
 		if (n_tokens != 3) {
 			fprintf(stderr, "ERROR: Invalid syntax. "
-			        "Use: insert <key> <record>\n");
+			        "Use: set <key> <record>\n");
 			return;
 		}
 
