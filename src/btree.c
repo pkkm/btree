@@ -98,29 +98,53 @@ struct Btree { // Typedef'd in the header file.
 	BtreeSuperblock superblock; // Cache.
 };
 
-static void btree_read_superblock(Btree *btree) {
-	fs_read(btree->file, &btree->superblock, 0, sizeof(btree->superblock));
-}
-
-static void btree_write_superblock(Btree *btree) {
-	fs_write(btree->file, &btree->superblock, 0, sizeof(btree->superblock));
-}
-
-static BtreeFree btree_read_free(Btree *btree, BtreePtr ptr) {
-	BtreeFree free;
-	fs_read(btree->file, &free, ptr * BTREE_BLOCK_SIZE, sizeof(free));
-	return free;
-}
-
-static void btree_write_free(Btree *btree, BtreeFree free, BtreePtr ptr) {
-	fs_write(btree->file, &free, ptr * BTREE_BLOCK_SIZE, sizeof(free));
-}
-
 #define DESERIALIZE(ptr, dest, type) \
 	do { \
 		(dest) = *(type *) (ptr); \
 		(ptr) = (char *) (ptr) + sizeof(type); \
 	} while (false)
+
+#define SERIALIZE(ptr, src, type) \
+	do { \
+		*(type *) (ptr) = (src); \
+		(ptr) = (char *) (ptr) + sizeof(type); \
+	} while (false)
+
+static void btree_read_superblock(Btree *btree) {
+	char block[BTREE_BLOCK_SIZE];
+	fs_read(btree->file, block, 0, sizeof(block));
+	void *pos = block;
+
+	DESERIALIZE(pos, btree->superblock.root, BtreePtr);
+	DESERIALIZE(pos, btree->superblock.free_list_head, BtreePtr);
+	DESERIALIZE(pos, btree->superblock.end, BtreePtr);
+}
+
+static void btree_write_superblock(Btree *btree) {
+	char block[BTREE_BLOCK_SIZE];
+	char *end = block;
+	SERIALIZE(end, btree->superblock.root, BtreePtr);
+	SERIALIZE(end, btree->superblock.free_list_head, BtreePtr);
+	SERIALIZE(end, btree->superblock.end, BtreePtr);
+	fs_write(btree->file, block, 0, end - block);
+}
+
+static BtreeFree btree_read_free(Btree *btree, BtreePtr ptr) {
+	char block[BTREE_BLOCK_SIZE];
+	fs_read(btree->file, block, ptr * BTREE_BLOCK_SIZE, sizeof(block));
+	void *pos = block;
+
+	BtreeFree free;
+	DESERIALIZE(pos, free.next_free, BtreePtr);
+	return free;
+}
+
+static void btree_write_free(Btree *btree, BtreeFree free, BtreePtr ptr) {
+	char block[BTREE_BLOCK_SIZE];
+	char *end = block;
+	SERIALIZE(end, free.next_free, BtreePtr);
+	fs_write(btree->file, block, ptr * BTREE_BLOCK_SIZE, end - block);
+}
 
 static BtreeNode btree_read_node(Btree *btree, BtreePtr ptr) {
 	char block[BTREE_BLOCK_SIZE];
@@ -140,12 +164,6 @@ static BtreeNode btree_read_node(Btree *btree, BtreePtr ptr) {
 	xassert(2, btree_node_valid(node, ptr == btree->superblock.root));
 	return node;
 }
-
-#define SERIALIZE(ptr, src, type) \
-	do { \
-		*(type *) (ptr) = (src); \
-		(ptr) = (char *) (ptr) + sizeof(type); \
-	} while (false)
 
 static void btree_write_node(Btree *btree, BtreeNode node, BtreePtr ptr) {
 	xassert(2, btree_node_valid(node, ptr == btree->superblock.root));
