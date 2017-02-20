@@ -86,7 +86,7 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 			return;
 		}
 
-		RecfIdx idx = recf_add(context->recf, record);
+		RecfRecordIdx idx = recf_add(context->recf, record);
 		btree_set(context->btree, key, idx);
 	} else if (strcmp(operation, "print-tree") == 0) {
 		btree_print(context->btree, stdout);
