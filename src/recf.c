@@ -187,13 +187,6 @@ void recf_delete(Recf *recf, RecfIdx idx) {
 	recf_dealloc_record(recf, idx);
 }
 
-void recf_print(Recf *recf, FILE *stream) {
-	for (RecfIdx idx = 0; idx < recf->superblock.end; idx++) {
-		fprintf(stream, "%" RECF_RECORD_PRINT "\n",
-		        recf_read_record(recf, idx));
-	}
-}
-
 FsStats recf_fs_stats(Recf *recf) {
 	return fs_stats(recf->file);
 }

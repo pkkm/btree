@@ -19,6 +19,4 @@ RecfIdx recf_add(Recf *recf, RecfRecord record);
 RecfRecord recf_get(Recf *recf, RecfIdx idx);
 void recf_delete(Recf *recf, RecfIdx idx);
 
-void recf_print(Recf *recf, FILE *stream);
-
 FsStats recf_fs_stats(Recf *recf);

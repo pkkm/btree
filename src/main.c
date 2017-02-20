@@ -90,8 +90,6 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 		btree_set(context->btree, key, idx);
 	} else if (strcmp(operation, "print-tree") == 0) {
 		btree_print(context->btree, stdout);
-	} else if (strcmp(operation, "print-record-file") == 0) {
-		recf_print(context->recf, stdout);
 	} else if (strcmp(operation, "list") == 0) {
 		btree_walk(context->btree, &list_btree_callback, context);
 	} else if (strcmp(operation, "delete") == 0) {
