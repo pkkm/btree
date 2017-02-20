@@ -78,6 +78,7 @@ static void recf_read(FsFile *file, void *dest,
 	recf_cache_block(file, block);
 
 	int offset_in_block = offset - block * RECF_BLOCK_SIZE;
+	xassert(1, offset_in_block + n_bytes <= RECF_BLOCK_SIZE);
 	memcpy(dest, recf_cache.data + offset_in_block, n_bytes);
 }
 
@@ -89,6 +90,7 @@ static void recf_write(FsFile *file, const void *src,
 	recf_cache_block(file, block);
 
 	int offset_in_block = offset - block * RECF_BLOCK_SIZE;
+	xassert(1, offset_in_block + n_bytes <= RECF_BLOCK_SIZE);
 	memcpy(recf_cache.data + offset_in_block, src, n_bytes);
 	recf_cache.dirty = true;
 }
