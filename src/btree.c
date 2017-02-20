@@ -362,6 +362,9 @@ typedef struct {
 	BtreeNode node;
 } BtreeNodeCache;
 
+enum { BTREE_CACHE_N_NODES = 32 };
+// Should exceed log_{BTREE_MAX_KEYS}(max possible number of items in the tree).
+
 static void btree_array_insert(void *array, size_t n_elems_before_insert,
                                size_t elem_size, void *new, size_t i_new) {
 	xassert(1, i_new <= n_elems_before_insert);
@@ -416,7 +419,7 @@ static void btree_set_up_pass(Btree *btree, BtreeItem new_item,
 	// Insert new_item into the node stored in cache[node_depth] on position
 	// i_in_node. Recurse upwards the tree (using the cache) if necessary.
 
-	xassert(1, node_depth >= 0);
+	xassert(1, node_depth >= 0 && node_depth < BTREE_CACHE_N_NODES);
 
 	BtreePtr node_ptr = cache[node_depth].ptr;
 	BtreeNode node = cache[node_depth].node;
@@ -529,6 +532,8 @@ static void btree_set_down_pass(Btree *btree, BtreeItem new_item,
 	// Recurse down the tree to find the appropriate node for new_item and
 	// insert the item there. Fill the cache while doing this.
 
+	xassert(1, node_depth >= 0 && node_depth < BTREE_CACHE_N_NODES);
+
 	BtreeNode node = btree_read_node(btree, node_ptr);
 	cache[node_depth].ptr = node_ptr;
 	cache[node_depth].node = node;
@@ -549,7 +554,7 @@ static void btree_set_down_pass(Btree *btree, BtreeItem new_item,
 
 	if (!node.is_leaf) {
 		// We know that keys[i_new_item - 1] < new_item.key < keys[i_new_item],
-		// so the new_item (if it exists) will be in the i_new_item-th child's
+		// so new_item (if it exists) will be in the i_new_item-th child's
 		// subtree.
 		return btree_set_down_pass(
 			btree, new_item, cache, node.children[i_new_item], node_depth + 1);
@@ -561,8 +566,7 @@ static void btree_set_down_pass(Btree *btree, BtreeItem new_item,
 
 void btree_set(Btree *btree, BtreeKey key, BtreeValue value) {
 	BtreeItem item = {key, value};
-	BtreeNodeCache cache[32]; // Tree height is logarithmic in number of items,
-	                          // so this should always be enough.
+	BtreeNodeCache cache[BTREE_CACHE_N_NODES];
 	btree_set_down_pass(btree, item, cache, btree->superblock.root, 0);
 }
 
