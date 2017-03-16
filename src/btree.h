@@ -21,7 +21,8 @@ bool btree_get(Btree *btree, BtreeKey key, BtreeValue *value);
 void btree_set(Btree *btree, BtreeKey key, BtreeValue value);
 
 void btree_print(Btree *btree, FILE *stream);
-void btree_walk(Btree *btree, void (*callback)(BtreeKey, BtreeValue, void *),
-                void *callback_context);
+void btree_walk(
+	Btree *btree,
+	void (*callback)(BtreeKey, BtreeValue, void *), void *callback_context);
 
 FsStats btree_fs_stats(Btree *btree);

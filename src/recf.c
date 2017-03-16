@@ -70,8 +70,9 @@ static void recf_cache_block(FsFile *file, RecfBlockIdx block) {
 	recf_cache.block = block;
 }
 
-static void recf_read(FsFile *file, void *dest,
-                      FsOffset offset, size_t n_bytes) {
+static void recf_read(
+	FsFile *file, void *dest, FsOffset offset, size_t n_bytes) {
+
 	// Read using cache.
 
 	RecfBlockIdx block = offset / RECF_BLOCK_SIZE;
@@ -82,8 +83,9 @@ static void recf_read(FsFile *file, void *dest,
 	memcpy(dest, recf_cache.data + offset_in_block, n_bytes);
 }
 
-static void recf_write(FsFile *file, const void *src,
-                       FsOffset offset, size_t n_bytes) {
+static void recf_write(
+	FsFile *file, const void *src, FsOffset offset, size_t n_bytes) {
+
 	// Write using cache.
 
 	RecfBlockIdx block = offset / RECF_BLOCK_SIZE;
@@ -120,8 +122,9 @@ static RecfRecord recf_read_record(Recf *recf, RecfRecordIdx idx) {
 	return record;
 }
 
-static void recf_write_record(Recf *recf, RecfRecord record,
-                              RecfRecordIdx idx) {
+static void recf_write_record(
+	Recf *recf, RecfRecord record, RecfRecordIdx idx) {
+
 	recf_write(recf->file, &record,
 	           recf_idx_to_disk_offset(idx), sizeof(record));
 }
