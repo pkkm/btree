@@ -18,7 +18,9 @@ Btree *btree_new(const char *file_name);
 void btree_destroy(Btree *btree);
 
 bool btree_get(Btree *btree, BtreeKey key, BtreeValue *value);
-void btree_set(Btree *btree, BtreeKey key, BtreeValue value);
+void btree_set(
+	Btree *btree, BtreeKey key, BtreeValue value,
+	bool *replaced, BtreeValue *old_value);
 
 void btree_print(Btree *btree, FILE *stream);
 void btree_walk(

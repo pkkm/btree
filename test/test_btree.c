@@ -70,7 +70,7 @@ static void test_set_walk() { // The B-tree has to be empty when this is run.
 
 	// Insert the items into the tree.
 	for (int i_item = 0; i_item < n_items; i_item++)
-		btree_set(btree, items[i_item].key, items[i_item].value);
+		btree_set(btree, items[i_item].key, items[i_item].value, NULL, NULL);
 
 	// Retrieve the items from the tree.
 	RetrievedItems retrieved;
@@ -96,7 +96,7 @@ static void test_set_get() {
 	for (int i_item = 0; i_item < N_ITEMS; i_item++) {
 		BtreeKey key = rand();
 		BtreeValue value = rand();
-		btree_set(btree, key, value);
+		btree_set(btree, key, value, NULL, NULL);
 
 		BtreeValue retrieved_value;
 		bool value_exists = btree_get(btree, key, &retrieved_value);

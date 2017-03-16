@@ -270,10 +270,8 @@ static void btree_compensate(
 	        btree_item_cmp(*separator_in_parent,
 	                       right->items[0]) < 0);
 
-	xassert(1, (left->is_leaf && right->is_leaf &&
-	            new_right_child == BTREE_NULL) ||
-	        (!left->is_leaf && !right->is_leaf &&
-	         new_right_child != BTREE_NULL));
+	xassert(1, !!left->is_leaf == !!right->is_leaf &&
+	        !!right->is_leaf == (new_right_child == BTREE_NULL));
 
 	// Collect the items of both nodes, the item separating them and the item to
 	// insert (new_item) into an array.
@@ -535,12 +533,14 @@ static void btree_set_up_pass(
 
 static void btree_set_down_pass(
 	Btree *btree, BtreeItem new_item,
+	bool *replaced, BtreeValue *old_value,
 	BtreeNodeCache *cache, BtreePtr node_ptr, int node_depth) {
 
 	// Recurse down the tree to find the appropriate node for new_item and
 	// insert the item there. Fill the cache while doing this.
 
 	xassert(1, node_depth >= 0 && node_depth < BTREE_CACHE_N_NODES);
+	xassert(1, (replaced == NULL) == (old_value == NULL));
 
 	BtreeNode node = btree_read_node(btree, node_ptr);
 	cache[node_depth].ptr = node_ptr;
@@ -556,6 +556,10 @@ static void btree_set_down_pass(
 	    btree_item_cmp(node.items[i_new_item], new_item) == 0) {
 
 		// We found the exact key, so let's set its associated value.
+		if (replaced != NULL) {
+			*replaced = true;
+			*old_value = node.items[i_new_item].value;
+		}
 		node.items[i_new_item].value = new_item.value;
 		btree_write_node(btree, node, node_ptr);
 		return;
@@ -566,17 +570,23 @@ static void btree_set_down_pass(
 		// so new_item (if it exists) will be in the i_new_item-th child's
 		// subtree.
 		return btree_set_down_pass(
-			btree, new_item, cache, node.children[i_new_item], node_depth + 1);
+			btree, new_item, replaced, old_value,
+			cache, node.children[i_new_item], node_depth + 1);
 	}
 
 	btree_set_up_pass(
 		btree, new_item, BTREE_NULL, i_new_item, cache, node_depth);
 }
 
-void btree_set(Btree *btree, BtreeKey key, BtreeValue value) {
+void btree_set(
+	Btree *btree, BtreeKey key, BtreeValue value,
+	bool *replaced, BtreeValue *old_value) {
+
 	BtreeItem item = {key, value};
 	BtreeNodeCache cache[BTREE_CACHE_N_NODES];
-	btree_set_down_pass(btree, item, cache, btree->superblock.root, 0);
+	btree_set_down_pass(
+		btree, item, replaced, old_value,
+		cache, btree->superblock.root, 0);
 }
 
 static bool btree_get_at_node(
