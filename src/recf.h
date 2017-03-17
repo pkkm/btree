@@ -4,7 +4,7 @@
 #include "fs.h"
 
 // Settings.
-enum { RECF_BLOCK_SIZE = 512 }; // Alignment; should be the disk's block size.
+enum { RECF_BLOCK_SIZE = 256 }; // Alignment; should be the disk's block size.
 typedef uint64_t RecfRecord;
 #define RECF_RECORD_PRINT PRIu64
 

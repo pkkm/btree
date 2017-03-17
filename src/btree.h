@@ -5,7 +5,7 @@
 #include "fs.h"
 
 // Settings.
-enum { BTREE_BLOCK_SIZE = 512 };
+enum { BTREE_BLOCK_SIZE = 256 };
 typedef uint32_t BtreeKey;
 typedef uint64_t BtreeValue;
 #define BTREE_KEY_PRINT PRIu32
