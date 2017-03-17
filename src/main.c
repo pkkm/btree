@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "btree.h"
@@ -13,6 +14,7 @@
 typedef struct {
 	Btree *btree;
 	Recf *recf;
+	bool show_stats;
 } Context;
 
 void print_key_value_record(BtreeKey key, BtreeValue value, Context *context) {
@@ -101,19 +103,33 @@ void execute_cmd(char *cmd, Context *context) { // Modifies the input string.
 	} else if (strcmp(operation, "delete") == 0) {
 		fprintf(stderr, "ERROR: Not implemented.\n");
 		return;
+	} else if (strcmp(operation, "show-stats") == 0) {
+		if (n_tokens == 1 || (n_tokens == 2 && strcmp(args[0], "true") == 0)) {
+			context->show_stats = true;
+		} else if (n_tokens == 2 && strcmp(args[0], "false") == 0) {
+			context->show_stats = false;
+		} else {
+			fprintf(stderr, "ERROR: Invalid syntax. "
+			        "Use: show-stats [true | false]\n");
+			return;
+		}
+
+		return;
 	} else {
 		fprintf(stderr, "ERROR: Unknown command: %s\n", operation);
 		return;
 	}
 
-	FsStats new_btree_stats = btree_fs_stats(context->btree);
-	FsStats new_recf_stats = recf_fs_stats(context->recf);
-	printf("Tree reads: %" PRIu64 ", writes: %" PRIu64 "; record file reads: %"
-	       PRIu64 ", writes: %" PRIu64 "\n",
-	       new_btree_stats.n_reads - old_btree_stats.n_reads,
-	       new_btree_stats.n_writes - old_btree_stats.n_writes,
-	       new_recf_stats.n_reads - old_recf_stats.n_reads,
-	       new_recf_stats.n_writes - old_recf_stats.n_writes);
+	if (context->show_stats) {
+		FsStats new_btree_stats = btree_fs_stats(context->btree);
+		FsStats new_recf_stats = recf_fs_stats(context->recf);
+		printf("Tree reads: %" PRIu64 ", writes: %" PRIu64
+		       "; record file reads: %" PRIu64 ", writes: %" PRIu64 "\n",
+		       new_btree_stats.n_reads - old_btree_stats.n_reads,
+		       new_btree_stats.n_writes - old_btree_stats.n_writes,
+		       new_recf_stats.n_reads - old_recf_stats.n_reads,
+		       new_recf_stats.n_writes - old_recf_stats.n_writes);
+	}
 }
 
 int main(int argc, char **argv) {
@@ -122,6 +138,7 @@ int main(int argc, char **argv) {
 	Context context;
 	context.btree = btree_new("btree.dat");
 	context.recf = recf_new("recf.dat");
+	context.show_stats = false;
 
 	bool interactive = (argc == 1);
 	if (interactive) {
